@@ -3,16 +3,17 @@
 
 echo "🔧 Setting up HPC environment..."
 
-# Load required modules on Spartan
+# Load required modules on Spartan (with prerequisites)
 module purge 2>/dev/null || true
-module load Python/3.11.3 || module load Python/3.10.4 || true
-module load GCC/11.3.0 || true
 
-# Choose ONE CUDA line (match with requirements_hpc.txt)
-# For cu118 wheels:
+# Prereq for Python/3.11.3
+module load GCCcore/11.3.0 || true
+
+# Python (pref 3.11.3, fallback 3.10.4)
+module load Python/3.11.3 || module load Python/3.10.4 || true
+
+# CUDA to match cu118 wheels
 module load CUDA/11.8.0 || true
-# For cu121 wheels (alternative):
-# module load CUDA/12.2.0 || true
 
 # Set environment variables
 export PROJECT_ID="punim2518"
