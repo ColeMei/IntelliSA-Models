@@ -12,18 +12,20 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
+# Add src to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / "src"))
 
-from iac_filter_training.generative_trainer import GenerativeTrainer
-from iac_filter_training.encoder_trainer import EncoderTrainer
+# Import trainers
+from trainers.generative_trainer import GenerativeTrainer
+from trainers.encoder_trainer import EncoderTrainer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def train_generative(args):
     """Train generative model (CodeLLaMA with LoRA)."""
-    logger.info("Training generative model...")
+    logger.info("🚀 Training generative model...")
     
     trainer = GenerativeTrainer(
         model_name=args.model_name,
@@ -31,10 +33,7 @@ def train_generative(args):
     )
     
     # Prepare datasets
-    train_path = args.train_path
-    val_path = args.val_path
-    
-    trainer.prepare_datasets(train_path, val_path)
+    trainer.prepare_datasets(args.train_path, args.val_path)
     
     # Train the model
     trainer.train(
@@ -46,11 +45,11 @@ def train_generative(args):
         eval_steps=args.eval_steps
     )
     
-    logger.info(f"Generative model training completed. Model saved to {args.output_dir}")
+    logger.info(f"✅ Generative model training completed. Model saved to {args.output_dir}")
 
 def train_encoder(args):
     """Train encoder model (CodeBERT/CodeT5)."""
-    logger.info("Training encoder model...")
+    logger.info("🚀 Training encoder model...")
     
     trainer = EncoderTrainer(
         model_name=args.model_name,
@@ -58,10 +57,7 @@ def train_encoder(args):
     )
     
     # Prepare datasets
-    train_path = args.train_path
-    val_path = args.val_path
-    
-    trainer.prepare_datasets(train_path, val_path)
+    trainer.prepare_datasets(args.train_path, args.val_path)
     
     # Train the model
     trainer.train(
@@ -73,7 +69,7 @@ def train_encoder(args):
         eval_steps=args.eval_steps
     )
     
-    logger.info(f"Encoder model training completed. Model saved to {args.output_dir}")
+    logger.info(f"✅ Encoder model training completed. Model saved to {args.output_dir}")
 
 def main():
     parser = argparse.ArgumentParser(description="Train Chef detection models")
@@ -90,12 +86,12 @@ def main():
     )
     parser.add_argument(
         "--train-path",
-        default="experiments/iac_filter_training/data/formatted_dataset/chef_train.jsonl",
+        default="data/processed/chef_train.jsonl",
         help="Path to training data"
     )
     parser.add_argument(
         "--val-path", 
-        default="experiments/iac_filter_training/data/formatted_dataset/chef_val.jsonl",
+        default="data/processed/chef_val.jsonl",
         help="Path to validation data"
     )
     parser.add_argument(
@@ -156,10 +152,21 @@ def main():
             args.learning_rate = 2e-5
     
     if args.output_dir is None:
-        args.output_dir = f"experiments/iac_filter_training/models/{args.approach}"
+        args.output_dir = f"models/{args.approach}"
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Log configuration
+    logger.info(f"Training configuration:")
+    logger.info(f"  Approach: {args.approach}")
+    logger.info(f"  Model: {args.model_name}")
+    logger.info(f"  Train data: {args.train_path}")
+    logger.info(f"  Val data: {args.val_path}")
+    logger.info(f"  Output: {args.output_dir}")
+    logger.info(f"  Batch size: {args.batch_size}")
+    logger.info(f"  Learning rate: {args.learning_rate}")
+    logger.info(f"  Epochs: {args.num_epochs}")
     
     # Train based on approach
     if args.approach == "generative":
