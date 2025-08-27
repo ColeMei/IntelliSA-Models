@@ -1,0 +1,30 @@
+# Generative Model Configuration
+model_name: "codellama/CodeLlama-7b-hf"
+max_length: 512
+batch_size: 2
+learning_rate: 5e-5
+num_epochs: 3
+warmup_steps: 100
+eval_steps: 50
+save_steps: 100
+
+# LoRA Configuration
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+
+# Data paths (will be overridden by CLI args)
+train_path: "data/processed/chef_train.jsonl"
+val_path: "data/processed/chef_val.jsonl"
+output_dir: "models/generative"
+
+# Training arguments
+evaluation_strategy: "steps"
+save_strategy: "steps"
+logging_steps: 10
+load_best_model_at_end: true
+metric_for_best_model: "eval_loss"
+greater_is_better: false
+fp16: true
