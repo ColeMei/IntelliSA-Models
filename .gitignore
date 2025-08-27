@@ -18,7 +18,7 @@ logs/
 !logs/.gitkeep
 
 # Experimental results - backup separately  
-results/*/
+results/
 !results/.gitkeep
 
 # Cache directories
@@ -135,7 +135,7 @@ slurm-*.err
 # Temporary HPC files
 /tmp/
 .tmp/
-scratch/
+temp_storage/
 
 # =============================================================================
 # Development Environment
