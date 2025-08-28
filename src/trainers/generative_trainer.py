@@ -83,7 +83,9 @@ class ChefDetectionDataset(Dataset):
         return {
             'input_ids': encoding['input_ids'].squeeze(),
             'attention_mask': encoding['attention_mask'].squeeze(),
-            'labels': labels.squeeze()
+            'labels': labels.squeeze(),
+            # numeric label for evaluation convenience (TP=1, FP=0)
+            'label_id': 1 if response.strip().upper() == 'TP' else 0
         }
 
 class GenerativeTrainer:
@@ -256,10 +258,14 @@ class GenerativeTrainer:
                     pad_token_id=self.tokenizer.eos_token_id,
                     eos_token_id=self.tokenizer.eos_token_id
                 )
-            gen = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            # Extract last tokenized word; fallback simple contains
-            pred_label = 1 if "TP" in gen.split()[-3:] or gen.strip().endswith("TP") else 0
-            true_label = item['labels'].item() if isinstance(item['labels'], torch.Tensor) else item['labels']
+            # Decode only generated continuation
+            gen = self.tokenizer.decode(
+                outputs[0][input_ids.shape[1]:], skip_special_tokens=True
+            ).strip()
+            # Extract label from tiny generation window
+            gen_upper = gen.upper()
+            pred_label = 1 if "TP" in gen_upper[:5] else (0 if "FP" in gen_upper[:5] else 0)
+            true_label = int(item.get('label_id', 0))
             labels.append(true_label)
             preds.append(pred_label)
 
