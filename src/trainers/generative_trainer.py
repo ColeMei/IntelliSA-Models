@@ -197,7 +197,7 @@ class GenerativeTrainer:
             warmup_steps=warmup_steps,
             save_steps=save_steps,
             eval_steps=eval_steps,
-            eval_strategy=evaluation_strategy,
+            evaluation_strategy=evaluation_strategy,
             save_strategy=save_strategy,
             logging_steps=logging_steps,
             load_best_model_at_end=load_best_model_at_end,
@@ -205,7 +205,7 @@ class GenerativeTrainer:
             greater_is_better=greater_is_better,
             fp16=fp16,
             dataloader_pin_memory=False,
-            remove_unused_columns=False,
+            remove_unused_columns=True,
             # Optimization for memory
             dataloader_num_workers=4,
             group_by_length=True,
