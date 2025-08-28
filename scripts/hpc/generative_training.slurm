@@ -2,7 +2,7 @@
 #SBATCH --job-name=generative_chef_training
 #SBATCH --partition=gpu-a100
 #SBATCH --qos=normal
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=0-8:00:00
@@ -55,19 +55,14 @@ cd ${PROJECT_ROOT}
 
 # Set Python path explicitly
 export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH}"
+export TOKENIZERS_PARALLELISM=false
 
-python scripts/train_models.py \
+srun --unbuffered python scripts/train_models.py \
     --approach generative \
-    --model-name codellama/CodeLlama-34b-hf \
+    --config ${PROJECT_ROOT}/configs/generative_config.yaml \
     --train-path ${TEMP_ROOT}/active_training/data_cache/chef_train.jsonl \
     --val-path ${TEMP_ROOT}/active_training/data_cache/chef_val.jsonl \
-    --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/generative \
-    --batch-size 1 \
-    --num-epochs 3 \
-    --learning-rate 5e-5 \
-    --warmup-steps 100 \
-    --save-steps 100 \
-    --eval-steps 50 2>&1 | tee ${TEMP_ROOT}/temp_logs/training_${SLURM_JOB_ID}.log
+    --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/generative 2>&1 | tee ${TEMP_ROOT}/temp_logs/training_${SLURM_JOB_ID}.log
 
 # Check if training completed successfully
 TRAIN_EXIT_CODE=$?

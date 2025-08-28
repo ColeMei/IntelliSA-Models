@@ -1,7 +1,7 @@
 # Generative Model Configuration
-model_name: "codellama/CodeLlama-7b-hf"
+model_name: "codellama/CodeLlama-34b-hf"
 max_length: 512
-batch_size: 2
+batch_size: 1
 learning_rate: 5e-5
 num_epochs: 3
 warmup_steps: 100

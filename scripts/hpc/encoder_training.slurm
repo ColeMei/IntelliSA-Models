@@ -55,19 +55,14 @@ cd ${PROJECT_ROOT}
 
 # Set Python path explicitly
 export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH}"
+export TOKENIZERS_PARALLELISM=false
 
-python scripts/train_models.py \
+srun --unbuffered python scripts/train_models.py \
     --approach encoder \
-    --model-name microsoft/codebert-base \
+    --config ${PROJECT_ROOT}/configs/encoder_config.yaml \
     --train-path ${TEMP_ROOT}/active_training/data_cache/chef_train.jsonl \
     --val-path ${TEMP_ROOT}/active_training/data_cache/chef_val.jsonl \
-    --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/encoder \
-    --batch-size 8 \
-    --num-epochs 3 \
-    --learning-rate 2e-5 \
-    --warmup-steps 100 \
-    --save-steps 100 \
-    --eval-steps 50 2>&1 | tee ${TEMP_ROOT}/temp_logs/training_${SLURM_JOB_ID}.log
+    --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/encoder 2>&1 | tee ${TEMP_ROOT}/temp_logs/training_${SLURM_JOB_ID}.log
 
 # Check if training completed successfully
 TRAIN_EXIT_CODE=$?

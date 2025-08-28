@@ -13,6 +13,8 @@ from transformers import (
 from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 import logging
 from typing import Dict, List, Optional
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from pathlib import Path
 import numpy as np
 
 logging.basicConfig(level=logging.INFO)
@@ -91,7 +93,11 @@ class GenerativeTrainer:
         self,
         model_name: str = "codellama/CodeLlama-34b-hf",
         output_dir: str = "models/generative",
-        use_4bit: bool = True
+        use_4bit: bool = True,
+        lora_r: int = 16,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.1,
+        lora_target_modules: Optional[List[str]] = None,
     ):
         self.model_name = model_name
         self.output_dir = output_dir
@@ -127,28 +133,30 @@ class GenerativeTrainer:
         if use_4bit:
             self.model = prepare_model_for_kbit_training(self.model)
         
-        # Configure LoRA with better target modules for CodeLlama
+        # Configure LoRA (config-driven)
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
-            r=16,
-            lora_alpha=32,
-            lora_dropout=0.1,
-            target_modules=[
+            r=lora_r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            target_modules=(lora_target_modules or [
                 "q_proj", "v_proj", "k_proj", "o_proj",
                 "gate_proj", "up_proj", "down_proj"
-            ],
+            ]),
             bias="none"
         )
         
+        self.model.config.use_cache = False
+        self.model.gradient_checkpointing_enable(use_reentrant=False)
         self.model = get_peft_model(self.model, lora_config)
         
         # Print trainable parameters
         self.model.print_trainable_parameters()
     
-    def prepare_datasets(self, train_path: str, val_path: str):
+    def prepare_datasets(self, train_path: str, val_path: str, max_length: int = 512):
         """Prepare train and validation datasets."""
-        self.train_dataset = ChefDetectionDataset(train_path, self.tokenizer)
-        self.val_dataset = ChefDetectionDataset(val_path, self.tokenizer)
+        self.train_dataset = ChefDetectionDataset(train_path, self.tokenizer, max_length=max_length)
+        self.val_dataset = ChefDetectionDataset(val_path, self.tokenizer, max_length=max_length)
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")
@@ -161,7 +169,15 @@ class GenerativeTrainer:
         warmup_steps: int = 100,
         save_steps: int = 100,
         eval_steps: int = 50,
-        gradient_accumulation_steps: int = 4
+        gradient_accumulation_steps: int = 4,
+        # TrainingArguments overrides from config
+        evaluation_strategy: str = "steps",
+        save_strategy: str = "steps",
+        logging_steps: int = 10,
+        load_best_model_at_end: bool = True,
+        metric_for_best_model: str = "eval_loss",
+        greater_is_better: bool = False,
+        fp16: bool = True,
     ):
         """Train the model."""
         
@@ -175,13 +191,13 @@ class GenerativeTrainer:
             warmup_steps=warmup_steps,
             save_steps=save_steps,
             eval_steps=eval_steps,
-            eval_strategy="steps",
-            save_strategy="steps",
-            logging_steps=10,
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
-            fp16=True,
+            eval_strategy=evaluation_strategy,
+            save_strategy=save_strategy,
+            logging_steps=logging_steps,
+            load_best_model_at_end=load_best_model_at_end,
+            metric_for_best_model=metric_for_best_model,
+            greater_is_better=greater_is_better,
+            fp16=fp16,
             dataloader_pin_memory=False,
             remove_unused_columns=False,
             # Optimization for memory
@@ -218,6 +234,42 @@ class GenerativeTrainer:
         self.tokenizer.save_pretrained(self.output_dir)
         
         logger.info(f"Model saved to {self.output_dir}")
+
+        # Minimal post-training evaluation using constrained decoding to TP/FP
+        logger.info("Running minimal generation-based evaluation on validation set...")
+        labels: List[int] = []
+        preds: List[int] = []
+        self.model.eval()
+        for item in self.val_dataset:
+            input_ids = item['input_ids'].unsqueeze(0).to(self.model.device)
+            attention_mask = item['attention_mask'].unsqueeze(0).to(self.model.device)
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=3,
+                    do_sample=False,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id
+                )
+            gen = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            # Extract last tokenized word; fallback simple contains
+            pred_label = 1 if "TP" in gen.split()[-3:] or gen.strip().endswith("TP") else 0
+            true_label = item['labels'].item() if isinstance(item['labels'], torch.Tensor) else item['labels']
+            labels.append(true_label)
+            preds.append(pred_label)
+
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary', zero_division=0)
+        acc = accuracy_score(labels, preds)
+        metrics = {"gen_accuracy": acc, "gen_f1": f1, "gen_precision": precision, "gen_recall": recall}
+        logger.info(f"Generation eval metrics: {metrics}")
+        # Save metrics to file
+        try:
+            import json
+            with open(Path(self.output_dir) / "generation_eval_metrics.json", "w") as f:
+                f.write(json.dumps(metrics, indent=2))
+        except Exception:
+            pass
     
     def predict(self, input_text: str, max_new_tokens: int = 10) -> Dict:
         """Make prediction on new input."""
