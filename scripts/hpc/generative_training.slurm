@@ -96,3 +96,6 @@ echo "✅ Generative training completed successfully!"
 echo "End Time: $(date)"
 echo "Job Duration: $((SECONDS / 60)) minutes"
 echo "========================================="
+
+# Package curated results snapshot for this job
+./scripts/hpc/consolidate_results.sh "$SLURM_JOB_ID" --tar || echo "Consolidation skipped/failed; continuing."
