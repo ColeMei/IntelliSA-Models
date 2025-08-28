@@ -154,6 +154,8 @@ class EncoderTrainer:
             metric_for_best_model="f1",
             greater_is_better=True,
             dataloader_pin_memory=False,
+            # Fix for datasets compatibility
+            remove_unused_columns=False,
         )
         
         trainer = Trainer(
