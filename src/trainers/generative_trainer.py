@@ -1,17 +1,19 @@
 import json
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     AutoTokenizer, 
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling,
+    BitsAndBytesConfig
 )
-from peft import LoraConfig, get_peft_model, TaskType
+from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 import logging
 from typing import Dict, List, Optional
-import os
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,8 +51,12 @@ class ChefDetectionDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.data[idx]
         
-        # Format the input with target
-        full_text = f"{sample['input_text']}\n\nAnswer: {sample['target']}"
+        # Better formatting for instruction tuning
+        instruction = sample['input_text']
+        response = sample['target']
+        
+        # Format as conversation
+        full_text = f"### Instruction:\n{instruction}\n\n### Response:\n{response}"
         
         # Tokenize
         encoding = self.tokenizer(
@@ -61,10 +67,21 @@ class ChefDetectionDataset(Dataset):
             return_tensors='pt'
         )
         
+        # Create labels - only compute loss on response tokens
+        labels = encoding['input_ids'].clone()
+        
+        # Find where response starts and mask instruction tokens
+        instruction_part = f"### Instruction:\n{instruction}\n\n### Response:\n"
+        instruction_tokens = self.tokenizer(instruction_part, add_special_tokens=False)['input_ids']
+        instruction_length = len(instruction_tokens)
+        
+        # Mask instruction tokens in labels
+        labels[:instruction_length] = -100
+        
         return {
             'input_ids': encoding['input_ids'].squeeze(),
             'attention_mask': encoding['attention_mask'].squeeze(),
-            'labels': encoding['input_ids'].squeeze().clone()
+            'labels': labels.squeeze()
         }
 
 class GenerativeTrainer:
@@ -72,34 +89,61 @@ class GenerativeTrainer:
     
     def __init__(
         self,
-        model_name: str = "codellama/CodeLlama-7b-hf",
-        output_dir: str = "experiments/iac_filter_training/models/generative",
-        lora_config: Optional[Dict] = None
+        model_name: str = "codellama/CodeLlama-32b-hf",
+        output_dir: str = "models/generative",
+        use_4bit: bool = True
     ):
         self.model_name = model_name
         self.output_dir = output_dir
-        self.lora_config = lora_config or self._default_lora_config()
+        self.use_4bit = use_4bit
         
-        # Initialize tokenizer and model
+        # Configure quantization for 32B model
+        if use_4bit:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            )
+        else:
+            bnb_config = None
+        
+        # Initialize tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            
+        # Initialize model with quantization
+        logger.info(f"Loading model {model_name} with {'4-bit' if use_4bit else '16-bit'} precision...")
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16,
-            device_map="auto"
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=torch.float16
         )
         
-        # Add LoRA adapters
-        self.model = get_peft_model(self.model, LoraConfig(**self.lora_config))
+        # Prepare model for training if using quantization
+        if use_4bit:
+            self.model = prepare_model_for_kbit_training(self.model)
         
-    def _default_lora_config(self) -> Dict:
-        """Default LoRA configuration for efficiency."""
-        return {
-            "task_type": TaskType.CAUSAL_LM,
-            "r": 16,
-            "lora_alpha": 32,
-            "lora_dropout": 0.1,
-            "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
-        }
+        # Configure LoRA with better target modules for CodeLlama
+        lora_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.1,
+            target_modules=[
+                "q_proj", "v_proj", "k_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj"
+            ],
+            bias="none"
+        )
+        
+        self.model = get_peft_model(self.model, lora_config)
+        
+        # Print trainable parameters
+        self.model.print_trainable_parameters()
     
     def prepare_datasets(self, train_path: str, val_path: str):
         """Prepare train and validation datasets."""
@@ -116,7 +160,8 @@ class GenerativeTrainer:
         num_epochs: int = 3,
         warmup_steps: int = 100,
         save_steps: int = 100,
-        eval_steps: int = 50
+        eval_steps: int = 50,
+        gradient_accumulation_steps: int = 4
     ):
         """Train the model."""
         
@@ -124,6 +169,7 @@ class GenerativeTrainer:
             output_dir=self.output_dir,
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
+            gradient_accumulation_steps=gradient_accumulation_steps,
             learning_rate=learning_rate,
             num_train_epochs=num_epochs,
             warmup_steps=warmup_steps,
@@ -137,6 +183,14 @@ class GenerativeTrainer:
             greater_is_better=False,
             fp16=True,
             dataloader_pin_memory=False,
+            remove_unused_columns=False,
+            # Optimization for memory
+            dataloader_num_workers=4,
+            group_by_length=True,
+            # Better saving strategy
+            save_total_limit=2,
+            # Report metrics
+            report_to=None
         )
         
         trainer = Trainer(
@@ -146,78 +200,89 @@ class GenerativeTrainer:
             eval_dataset=self.val_dataset,
             data_collator=DataCollatorForLanguageModeling(
                 tokenizer=self.tokenizer,
-                mlm=False
+                mlm=False,
+                pad_to_multiple_of=8
             ),
         )
         
         logger.info("Starting training...")
+        
+        # Clear cache before training
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
         trainer.train()
         
-        # Save the model
+        # Save the final model
         trainer.save_model()
         self.tokenizer.save_pretrained(self.output_dir)
         
         logger.info(f"Model saved to {self.output_dir}")
     
-    def predict(self, input_text: str) -> str:
+    def predict(self, input_text: str, max_new_tokens: int = 10) -> Dict:
         """Make prediction on new input."""
         self.model.eval()
         
-        # Format input
-        input_text = f"{input_text}\n\nAnswer:"
+        # Format input properly
+        formatted_input = f"### Instruction:\n{input_text}\n\n### Response:\n"
         
         inputs = self.tokenizer(
-            input_text,
+            formatted_input,
             return_tensors="pt",
             truncation=True,
-            max_length=512
-        )
+            max_length=512,
+            padding=True
+        ).to(self.model.device)
         
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=10,
+                max_new_tokens=max_new_tokens,
                 do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                temperature=0.1,
+                top_p=0.9
             )
         
-        # Decode the generated text
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Decode only the new tokens
+        generated_text = self.tokenizer.decode(
+            outputs[0][inputs['input_ids'].shape[1]:], 
+            skip_special_tokens=True
+        ).strip()
         
-        # Extract the answer (last part after "Answer:")
-        answer = generated_text.split("Answer:")[-1].strip()
-        
-        return answer
+        return {
+            'prediction': generated_text,
+            'confidence': 1.0,
+            'full_response': self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        }
 
 def main():
     """Main training script for generative approach."""
     
     # Initialize trainer
     trainer = GenerativeTrainer(
-        model_name="codellama/CodeLlama-7b-hf",  # Start with 7B for demo
-        output_dir="experiments/iac_filter_training/models/generative"
+        model_name="codellama/CodeLlama-32b-hf",
+        output_dir="models/generative",
+        use_4bit=True
     )
     
     # Prepare datasets
-    train_path = "experiments/iac_filter_training/data/formatted_dataset/chef_train.jsonl"
-    val_path = "experiments/iac_filter_training/data/formatted_dataset/chef_val.jsonl"
+    train_path = "data/processed/chef_train.jsonl"
+    val_path = "data/processed/chef_val.jsonl"
     
     trainer.prepare_datasets(train_path, val_path)
     
     # Train the model
     trainer.train(
-        batch_size=1,  # Small batch size for demo
+        batch_size=2,
         learning_rate=5e-5,
-        num_epochs=2,  # Few epochs for demo
-        warmup_steps=10,
-        save_steps=50,
-        eval_steps=25
+        num_epochs=3,
+        warmup_steps=100,
+        save_steps=100,
+        eval_steps=50,
+        gradient_accumulation_steps=4
     )
-    
-    # Test prediction
-    test_input = "You are a static analyzer...\n\n### RAW CODE INPUT (chef)\n\npassword = 'secret123'\n\nBased on the static analysis rules above, does this code contain a true instance of \"Hard-coded secret\"?\n\nAnswer (YES or NO only):"
-    prediction = trainer.predict(test_input)
-    print(f"Test prediction: {prediction}")
 
 if __name__ == "__main__":
     main()

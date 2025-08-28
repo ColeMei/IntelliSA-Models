@@ -141,7 +141,7 @@ def main():
     # Set defaults based on approach
     if args.model_name is None:
         if args.approach == "generative":
-            args.model_name = "codellama/CodeLlama-7b-hf"
+            args.model_name = "codellama/CodeLlama-32b-hf"
         else:
             args.model_name = "microsoft/codebert-base"
     
