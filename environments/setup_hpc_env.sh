@@ -46,16 +46,14 @@ export PROJECT_ROOT="/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models"
 export TEMP_ROOT="/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/temp_storage"
 
 # Cache directories (use temp storage for better I/O)
-export TRANSFORMERS_CACHE="${TEMP_ROOT}/model_cache/huggingface_cache"
-export HF_HOME="${TEMP_ROOT}/model_cache/huggingface_cache"
-export HF_DATASETS_CACHE="${TEMP_ROOT}/model_cache/huggingface_cache"
+export HF_HOME="${TEMP_ROOT}/model_cache/huggingface"
+export HF_HUB_CACHE="${HF_HOME}/hub"
+export HF_DATASETS_CACHE="${HF_HOME}/datasets"
 export TORCH_HOME="${TEMP_ROOT}/model_cache/torch_cache"
 export WANDB_CACHE_DIR="${TEMP_ROOT}/model_cache/wandb_cache"
 
 # Create cache directories
-mkdir -p ${TRANSFORMERS_CACHE}
-mkdir -p ${TORCH_HOME}
-mkdir -p ${WANDB_CACHE_DIR}
+mkdir -p ${HF_HUB_CACHE} ${HF_DATASETS_CACHE} ${TORCH_HOME} ${WANDB_CACHE_DIR}
 
 # GPU settings - let SLURM handle GPU allocation
 if [ ! -z "$SLURM_JOB_ID" ]; then
@@ -124,4 +122,4 @@ echo "✅ HPC environment ready!"
 echo "  Project root: ${PROJECT_ROOT}"
 echo "  Temp storage: ${TEMP_ROOT}"
 echo "  Python path: ${PYTHONPATH}"
-echo "  Cache dirs: ${TRANSFORMERS_CACHE}"
+echo "  Cache dirs: ${HF_HUB_CACHE}, ${HF_DATASETS_CACHE}, ${TORCH_HOME}, ${WANDB_CACHE_DIR}"
