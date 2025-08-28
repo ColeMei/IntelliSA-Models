@@ -203,7 +203,7 @@ def main():
     
     # Initialize trainer
     trainer = EncoderTrainer(
-        model_name="microsoft/codebert-base",  # Start with CodeBERT for demo
+        model_name="microsoft/codebert-base",
         output_dir="experiments/iac_filter_training/models/encoder"
     )
     
@@ -215,9 +215,9 @@ def main():
     
     # Train the model
     trainer.train(
-        batch_size=2,  # Small batch size for demo
+        batch_size=2,
         learning_rate=2e-5,
-        num_epochs=2,  # Few epochs for demo
+        num_epochs=2,
         warmup_steps=10,
         save_steps=25,
         eval_steps=10
