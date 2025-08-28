@@ -58,7 +58,7 @@ export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH}"
 
 python scripts/train_models.py \
     --approach generative \
-    --model-name codellama/CodeLlama-32b-hf \
+    --model-name codellama/CodeLlama-34b-hf \
     --train-path ${TEMP_ROOT}/active_training/data_cache/chef_train.jsonl \
     --val-path ${TEMP_ROOT}/active_training/data_cache/chef_val.jsonl \
     --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/generative \

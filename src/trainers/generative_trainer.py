@@ -89,7 +89,7 @@ class GenerativeTrainer:
     
     def __init__(
         self,
-        model_name: str = "codellama/CodeLlama-32b-hf",
+        model_name: str = "codellama/CodeLlama-34b-hf",
         output_dir: str = "models/generative",
         use_4bit: bool = True
     ):
@@ -262,7 +262,7 @@ def main():
     
     # Initialize trainer
     trainer = GenerativeTrainer(
-        model_name="codellama/CodeLlama-32b-hf",
+        model_name="codellama/CodeLlama-34b-hf",
         output_dir="models/generative",
         use_4bit=True
     )

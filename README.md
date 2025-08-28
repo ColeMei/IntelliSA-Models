@@ -75,7 +75,7 @@ llm-iac-seceval-models/
 
 - **CodeLLaMA-7B**: `codellama/CodeLlama-7b-hf`
 - **CodeLLaMA-13B**: `codellama/CodeLlama-13b-hf`
-- **CodeLLaMA-32B**: `codellama/CodeLlama-32b-hf`
+- **CodeLLaMA-34B**: `codellama/CodeLlama-34b-hf`
 - Max length: 512 tokens
 - LoRA rank: 16, alpha: 32
 - Batch size: 1-2
