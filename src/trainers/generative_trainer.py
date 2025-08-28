@@ -147,7 +147,11 @@ class GenerativeTrainer:
         )
         
         self.model.config.use_cache = False
-        self.model.gradient_checkpointing_enable(use_reentrant=False)
+        # enable gradient checkpointing (older HF/torch versions do not support use_reentrant kwarg)
+        try:
+            self.model.gradient_checkpointing_enable(use_reentrant=False)
+        except TypeError:
+            self.model.gradient_checkpointing_enable()
         self.model = get_peft_model(self.model, lora_config)
         
         # Print trainable parameters

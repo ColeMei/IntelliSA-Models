@@ -171,9 +171,9 @@ def main():
     
     if args.learning_rate is None:
         if args.approach == "generative":
-            args.learning_rate = config_data.get("learning_rate", 5e-5)
+            args.learning_rate = float(config_data.get("learning_rate", 5e-5))
         else:
-            args.learning_rate = config_data.get("learning_rate", 2e-5)
+            args.learning_rate = float(config_data.get("learning_rate", 2e-5))
     
     if args.output_dir is None:
         args.output_dir = config_data.get("output_dir", f"models/{args.approach}")
