@@ -99,8 +99,10 @@ echo "Done: ${RUN_DIR}"
 
 if ${DO_TAR}; then
   tar_path="${RUN_DIR}.tar.gz"
-  tar -czf "${tar_path}" -C "results" "$(basename "${RUN_DIR}")"
-  echo "Created archive: ${tar_path}"
+  tar -czf "${tar_path}" -C "results" "$(basename "${RUN_DIR}")" || true
+  [[ -f "${tar_path}" ]] && echo "Created archive: ${tar_path}" || echo "Tar archive not created."
 fi
+
+exit 0
 
 
