@@ -192,7 +192,7 @@ class EncoderEvaluator:
                 'precision': float(precision),
                 'recall': float(recall),
                 'f1': float(f1),
-                'support': int(support[1]) if len(support) > 1 else int(support),
+                'support': int(support),
                 'eval_loss': float(eval_results.get('eval_loss', 0.0))
             },
             'confusion_matrix': {

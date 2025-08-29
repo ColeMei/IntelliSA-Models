@@ -243,7 +243,7 @@ class GenerativeEvaluator:
                 'precision': float(precision),
                 'recall': float(recall),
                 'f1': float(f1),
-                'support': int(support[1]) if len(support) > 1 else int(support),
+                'support': int(support),
             },
             'confusion_matrix': {
                 'tn': int(cm[0, 0]) if cm.shape == (2, 2) else 0,
