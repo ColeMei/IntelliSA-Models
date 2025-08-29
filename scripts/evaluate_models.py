@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 def evaluate_generative(args, config_data):
     """Evaluate generative model (CodeLLaMA with LoRA)."""
-    logger.info("🚀 Evaluating generative model...")
+    logger.info("Evaluating generative model")
     
     evaluator = GenerativeEvaluator(
         model_path=args.model_path,
@@ -60,7 +60,7 @@ def evaluate_generative(args, config_data):
 
 def evaluate_encoder(args, config_data):
     """Evaluate encoder model (CodeBERT/CodeT5)."""
-    logger.info("🚀 Evaluating encoder model...")
+    logger.info("Evaluating encoder model")
     
     evaluator = EncoderEvaluator(
         model_path=args.model_path,
@@ -83,7 +83,7 @@ def evaluate_encoder(args, config_data):
 
 def compare_models(args, config_data):
     """Compare multiple models."""
-    logger.info("🔄 Comparing models...")
+    logger.info("Comparing models")
     
     comparator = ModelComparator(output_dir=args.output_dir)
     
@@ -101,7 +101,7 @@ def compare_models(args, config_data):
     # Generate comparison
     comparison_results = comparator.compare_models(model_results, args.test_path)
     
-    logger.info(f"✅ Model comparison completed.")
+    logger.info(f"Model comparison completed.")
     return comparison_results
 
 def main():
@@ -209,17 +209,17 @@ def main():
             parser.error("--model-paths is required for model comparison (not found in config)")
     
     # Log configuration summary
-    logger.info(f"📋 Configuration loaded from: {args.config if args.config else 'defaults'}")
-    logger.info(f"🎯 Approach: {args.approach}")
+    logger.info(f"Configuration loaded from: {args.config if args.config else 'defaults'}")
+    logger.info(f"Approach: {args.approach}")
     if args.approach != "compare":
-        logger.info(f"🤖 Model path: {args.model_path}")
+        logger.info(f"Model path: {args.model_path}")
     else:
-        logger.info(f"🤖 Model paths: {args.model_paths}")
-    logger.info(f"📊 Test data: {args.test_path}")
-    logger.info(f"📁 Output directory: {args.output_dir}")
-    logger.info(f"🔢 Batch size: {args.batch_size}")
+        logger.info(f"Model paths: {args.model_paths}")
+    logger.info(f"Test data: {args.test_path}")
+    logger.info(f"Output directory: {args.output_dir}")
+    logger.info(f"Batch size: {args.batch_size}")
     if args.max_samples:
-        logger.info(f"📈 Max samples: {args.max_samples}")
+        logger.info(f"Max samples: {args.max_samples}")
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -273,24 +273,24 @@ def main():
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
-        logger.info(f"📊 Evaluation results saved to {results_file}")
-        
+        logger.info(f"Evaluation results saved to {results_file}")
+
         # Print summary
         if "metrics" in results:
             metrics = results["metrics"]
-            logger.info(f"📈 Evaluation Summary:")
+            logger.info(f"Evaluation Summary:")
             logger.info(f"   Accuracy: {metrics.get('accuracy', 'N/A'):.4f}")
             logger.info(f"   F1-Score: {metrics.get('f1', 'N/A'):.4f}")
             logger.info(f"   Precision: {metrics.get('precision', 'N/A'):.4f}")
             logger.info(f"   Recall: {metrics.get('recall', 'N/A'):.4f}")
-        
+
         elapsed_time = time.time() - start_time
-        logger.info(f"⏱️  Total evaluation time: {elapsed_time:.2f} seconds")
-        
-        logger.info(f"✅ Evaluation completed successfully!")
-        
+        logger.info(f"Total evaluation time: {elapsed_time:.2f} seconds")
+
+        logger.info(f"Evaluation completed successfully!")
+
     except Exception as e:
-        logger.error(f"❌ Evaluation failed: {str(e)}")
+        logger.error(f"Evaluation failed: {str(e)}")
         raise
 
 if __name__ == "__main__":

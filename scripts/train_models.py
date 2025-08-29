@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 def train_generative(args):
     """Train generative model (CodeLLaMA with LoRA)."""
-    logger.info("🚀 Training generative model...")
+    logger.info("Training generative model")
     
     trainer = GenerativeTrainer(
         model_name=args.model_name,
@@ -52,11 +52,11 @@ def train_generative(args):
         eval_steps=args.eval_steps
     )
     
-    logger.info(f"✅ Generative model training completed. Model saved to {args.output_dir}")
+    logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
 
 def train_encoder(args):
     """Train encoder model (CodeBERT/CodeT5)."""
-    logger.info("🚀 Training encoder model...")
+    logger.info("Training encoder model")
     
     trainer = EncoderTrainer(
         model_name=args.model_name,
@@ -76,7 +76,7 @@ def train_encoder(args):
         eval_steps=args.eval_steps
     )
     
-    logger.info(f"✅ Encoder model training completed. Model saved to {args.output_dir}")
+    logger.info(f" Encoder model training completed. Model saved to {args.output_dir}")
 
 def main():
     parser = argparse.ArgumentParser(description="Train Chef detection models")
@@ -297,7 +297,7 @@ def main():
             greater_is_better=greater_is_better,
             fp16=fp16,
         )
-        logger.info(f"✅ Generative model training completed. Model saved to {args.output_dir}")
+        logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
     else:
         train_encoder(args)
 

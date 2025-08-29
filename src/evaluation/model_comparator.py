@@ -79,7 +79,7 @@ class ModelComparator:
         # Generate HTML report
         self._generate_html_report(comparison_results, df)
         
-        logger.info(f"✅ Model comparison completed. Results saved to {self.output_dir}")
+        logger.info(f"Model comparison completed. Results saved to {self.output_dir}")
         
         return comparison_results
     
@@ -117,7 +117,7 @@ class ModelComparator:
         # Confusion matrix comparison (if available)
         # This would require access to the detailed results
         
-        logger.info("📊 Performance plots created")
+        logger.info("Performance plots created")
     
     def _create_radar_chart(self, df: pd.DataFrame):
         """Create radar chart comparing models."""
@@ -347,4 +347,4 @@ class ModelComparator:
         with open(html_file, 'w') as f:
             f.write(html_content)
         
-        logger.info(f"📄 HTML report saved to {html_file}")
+        logger.info(f"HTML report saved to {html_file}")

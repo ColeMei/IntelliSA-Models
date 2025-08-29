@@ -76,7 +76,7 @@ class GenerativeEvaluator:
         # Load LoRA adapters
         try:
             self.model = PeftModel.from_pretrained(self.model, str(self.model_path))
-            logger.info("✅ LoRA adapters loaded successfully")
+            logger.info("LoRA adapters loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load LoRA adapters: {e}")
             raise
@@ -84,7 +84,7 @@ class GenerativeEvaluator:
         # Set to evaluation mode
         self.model.eval()
         
-        logger.info(f"✅ Model loaded successfully")
+        logger.info(f"Model loaded successfully")
     
     def _load_test_data(self, test_path: str) -> List[Dict]:
         """Load test data from JSONL file."""
@@ -273,8 +273,8 @@ class GenerativeEvaluator:
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
-        logger.info(f"✅ Evaluation completed in {evaluation_time:.2f} seconds")
-        logger.info(f"📊 Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
+        logger.info(f"Evaluation completed in {evaluation_time:.2f} seconds")
+        logger.info(f"Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
         
         return results
     

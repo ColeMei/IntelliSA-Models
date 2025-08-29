@@ -85,7 +85,7 @@ class EncoderEvaluator:
         if torch.cuda.is_available():
             self.model = self.model.cuda()
         
-        logger.info(f"✅ Model loaded successfully")
+        logger.info(f"Model loaded successfully")
     
     def _load_test_data(self, test_path: str, max_samples: Optional[int] = None) -> ChefTestDataset:
         """Load test dataset."""
@@ -223,8 +223,8 @@ class EncoderEvaluator:
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
-        logger.info(f"✅ Evaluation completed in {evaluation_time:.2f} seconds")
-        logger.info(f"📊 Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
+        logger.info(f"Evaluation completed in {evaluation_time:.2f} seconds")
+        logger.info(f"Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
         
         return results
     

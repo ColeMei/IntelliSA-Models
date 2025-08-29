@@ -83,7 +83,7 @@ class EncoderTrainer:
     def __init__(
         self,
         model_name: str = "microsoft/codebert-base",
-        output_dir: str = "experiments/iac_filter_training/models/encoder"
+        output_dir: str = "models/encoder"
     ):
         self.model_name = model_name
         self.output_dir = output_dir
@@ -91,7 +91,7 @@ class EncoderTrainer:
         # Initialize tokenizer and model
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # ✅ Use the standard approach instead of custom class
+        # Use the standard approach instead of custom class
         self.model = AutoModelForSequenceClassification.from_pretrained(
             model_name, 
             num_labels=2
@@ -188,12 +188,12 @@ def main():
     # Initialize trainer
     trainer = EncoderTrainer(
         model_name="microsoft/codebert-base",
-        output_dir="experiments/iac_filter_training/models/encoder"
+        output_dir="models/encoder"
     )
-    
+
     # Prepare datasets
-    train_path = "experiments/iac_filter_training/data/formatted_dataset/chef_train.jsonl"
-    val_path = "experiments/iac_filter_training/data/formatted_dataset/chef_val.jsonl"
+    train_path = "data/processed/chef_train.jsonl"
+    val_path = "data/processed/chef_val.jsonl"
     
     trainer.prepare_datasets(train_path, val_path)
     
@@ -210,7 +210,7 @@ def main():
     # Test prediction
     test_input = "password = 'secret123'"
     prediction = trainer.predict(test_input)
-    print(f"Test prediction: {prediction}")
+    logger.info(f"Test prediction: {prediction}")
 
 if __name__ == "__main__":
     main()
