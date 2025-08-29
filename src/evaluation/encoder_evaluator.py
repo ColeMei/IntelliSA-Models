@@ -156,6 +156,16 @@ class EncoderEvaluator:
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, average='binary', zero_division=0
         )
+
+        # Handle case where any metric might be None
+        if precision is None:
+            precision = 0.0
+        if recall is None:
+            recall = 0.0
+        if f1 is None:
+            f1 = 0.0
+        if support is None:
+            support = 0
         
         # Confusion matrix
         cm = confusion_matrix(y_true, y_pred)
@@ -253,7 +263,15 @@ class EncoderEvaluator:
                 precision, recall, f1, _ = precision_recall_fscore_support(
                     y_true, y_pred, average='binary', zero_division=0
                 )
-                
+
+                # Handle None values in per-smell metrics
+                if precision is None:
+                    precision = 0.0
+                if recall is None:
+                    recall = 0.0
+                if f1 is None:
+                    f1 = 0.0
+
                 smell_metrics[smell] = {
                     'count': len(y_true),
                     'accuracy': float(accuracy),
