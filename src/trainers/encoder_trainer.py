@@ -1,10 +1,9 @@
 import json
 import torch
-import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from transformers import (
     AutoTokenizer, 
-    AutoModel,
+    AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer,
     DataCollatorWithPadding
@@ -16,28 +15,6 @@ import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class ChefDetectionClassifier(nn.Module):
-    """Binary classifier for Chef detection using encoder models."""
-    
-    def __init__(self, model_name: str, num_labels: int = 2):
-        super().__init__()
-        self.encoder = AutoModel.from_pretrained(model_name)
-        self.dropout = nn.Dropout(0.1)
-        self.classifier = nn.Linear(self.encoder.config.hidden_size, num_labels)
-        
-    def forward(self, input_ids, attention_mask, labels=None):
-        outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.last_hidden_state[:, 0, :]  # Use [CLS] token
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        
-        loss = None
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, 2), labels.view(-1))
-        
-        return {"loss": loss, "logits": logits}
 
 class ChefDetectionDataset(Dataset):
     """Dataset for Chef detection classification using encoder approach."""
@@ -113,7 +90,12 @@ class EncoderTrainer:
         
         # Initialize tokenizer and model
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = ChefDetectionClassifier(model_name)
+        
+        # ✅ Use the standard approach instead of custom class
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            model_name, 
+            num_labels=2
+        )
         
         # Add special tokens if needed
         if self.tokenizer.pad_token is None:
@@ -190,7 +172,7 @@ class EncoderTrainer:
         
         with torch.no_grad():
             outputs = self.model(**inputs)
-            logits = outputs['logits']
+            logits = outputs.logits
             probs = torch.softmax(logits, dim=-1)
             prediction = torch.argmax(logits, dim=-1)
         
