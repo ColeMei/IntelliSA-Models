@@ -6,6 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=0-8:00:00
+#SBATCH --tmp=50GB
 #SBATCH --output=/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/logs/slurm_outputs/%j_generative.out
 #SBATCH --error=/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/logs/slurm_outputs/%j_generative.err
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -20,6 +21,7 @@ echo "Partition: $SLURM_JOB_PARTITION"
 echo "CPUs: $SLURM_CPUS_PER_TASK"
 echo "GPUs: $CUDA_VISIBLE_DEVICES"
 echo "Memory: ${SLURM_MEM_PER_NODE}MB"
+echo "Fast Storage: $(df -h /tmp | tail -1 | awk '{print $2" available, "$4" free"}')"
 echo "Start Time: $(date)"
 echo "========================================="
 
@@ -32,25 +34,36 @@ python --version
 nvidia-smi
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
 
-# Clean and prepare temp storage
-echo "🧹 Preparing temp storage..."
-rm -rf ${TEMP_ROOT}/active_training/data_cache/*
-mkdir -p ${TEMP_ROOT}/active_training/data_cache
-mkdir -p ${TEMP_ROOT}/active_training/model_checkpoints/generative
-mkdir -p ${TEMP_ROOT}/temp_logs
+# Set up fast local storage structure
+echo "🏗️ Setting up fast local storage structure..."
+FAST_STORAGE="/tmp"
+TRAINING_DIR="${FAST_STORAGE}/training_${SLURM_JOB_ID}"
+DATA_CACHE="${TRAINING_DIR}/data_cache"
+MODEL_CHECKPOINTS="${TRAINING_DIR}/model_checkpoints"
+TEMP_LOGS="${TRAINING_DIR}/logs"
 
-# Copy data to temp storage for better I/O
-echo "📋 Staging data to temp storage..."
-cp -r ${PROJECT_ROOT}/data/processed/* ${TEMP_ROOT}/active_training/data_cache/
+# Clean and prepare fast local storage
+rm -rf ${TRAINING_DIR} 2>/dev/null || true
+mkdir -p ${DATA_CACHE}
+mkdir -p ${MODEL_CHECKPOINTS}/generative
+mkdir -p ${TEMP_LOGS}
 
-# Verify data exists
-if [[ ! -f "${TEMP_ROOT}/active_training/data_cache/chef_train.jsonl" ]]; then
-    echo "❌ Training data not found! Exiting..."
+# Copy data to fast local storage for better I/O
+echo "📋 Staging data to fast local storage..."
+cp -r ${PROJECT_ROOT}/data/processed/* ${DATA_CACHE}/
+
+# Verify data exists on fast storage
+if [[ ! -f "${DATA_CACHE}/chef_train.jsonl" ]]; then
+    echo "❌ Training data not found on fast storage! Exiting..."
     exit 1
 fi
 
+echo "✅ Data staged successfully to fast storage"
+echo "  Training data: ${DATA_CACHE}/chef_train.jsonl"
+echo "  Validation data: ${DATA_CACHE}/chef_val.jsonl"
+
 # Run generative training with error handling
-echo "🚀 Starting generative training..."
+echo "🚀 Starting generative training on fast storage..."
 cd ${PROJECT_ROOT}
 
 # Set Python path explicitly
@@ -60,37 +73,68 @@ export TOKENIZERS_PARALLELISM=false
 srun --unbuffered python scripts/train_models.py \
     --approach generative \
     --config ${PROJECT_ROOT}/configs/generative_config.yaml \
-    --train-path ${TEMP_ROOT}/active_training/data_cache/chef_train.jsonl \
-    --val-path ${TEMP_ROOT}/active_training/data_cache/chef_val.jsonl \
-    --output-dir ${TEMP_ROOT}/active_training/model_checkpoints/generative 2>&1 | tee ${TEMP_ROOT}/temp_logs/training_${SLURM_JOB_ID}.log
+    --train-path ${DATA_CACHE}/chef_train.jsonl \
+    --val-path ${DATA_CACHE}/chef_val.jsonl \
+    --output-dir ${MODEL_CHECKPOINTS}/generative 2>&1 | tee ${TEMP_LOGS}/training_${SLURM_JOB_ID}.log
 
 # Check if training completed successfully
 TRAIN_EXIT_CODE=$?
 if [ $TRAIN_EXIT_CODE -ne 0 ]; then
     echo "❌ Training failed with exit code $TRAIN_EXIT_CODE"
     # Still copy logs for debugging
-    cp ${TEMP_ROOT}/temp_logs/* ${PROJECT_ROOT}/logs/training/ 2>/dev/null || true
+    mkdir -p ${PROJECT_ROOT}/logs/training/
+    cp ${TEMP_LOGS}/* ${PROJECT_ROOT}/logs/training/ 2>/dev/null || true
     exit $TRAIN_EXIT_CODE
 fi
 
-# Copy results back to permanent storage
+echo "✅ Training completed successfully!"
+
+# Create timestamped directories for permanent storage (no overwriting)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+PERMANENT_MODEL_DIR="${PROJECT_ROOT}/models/generative_${TIMESTAMP}_job${SLURM_JOB_ID}"
+RESULT_DIR="${PROJECT_ROOT}/results/run_${SLURM_JOB_ID}_${TIMESTAMP}"
+
 echo "💾 Copying results to permanent storage..."
-mkdir -p ${PROJECT_ROOT}/models/
+echo "  Model destination: ${PERMANENT_MODEL_DIR}"
+echo "  Results destination: ${RESULT_DIR}"
+
+# Create directories
+mkdir -p ${PERMANENT_MODEL_DIR}
+mkdir -p ${RESULT_DIR}/model
 mkdir -p ${PROJECT_ROOT}/logs/training/
 
-cp -r ${TEMP_ROOT}/active_training/model_checkpoints/generative ${PROJECT_ROOT}/models/
-cp ${TEMP_ROOT}/temp_logs/* ${PROJECT_ROOT}/logs/training/ 2>/dev/null || true
+# Copy model to timestamped location (preserve all training runs)
+cp -r ${MODEL_CHECKPOINTS}/generative/* ${PERMANENT_MODEL_DIR}/
 
-# Clean up temp files to save space
-echo "🧹 Cleaning temp files..."
-rm -rf ${TEMP_ROOT}/active_training/data_cache/*
-rm -rf ${TEMP_ROOT}/active_training/model_checkpoints/*
+# Copy to results directory structure
+cp -r ${MODEL_CHECKPOINTS}/generative ${RESULT_DIR}/model/
+cp ${TEMP_LOGS}/* ${RESULT_DIR}/ 2>/dev/null || true
+cp ${PROJECT_ROOT}/configs/generative_config.yaml ${RESULT_DIR}/config_used.yaml
+
+# Copy logs to training logs directory
+cp ${TEMP_LOGS}/* ${PROJECT_ROOT}/logs/training/ 2>/dev/null || true
+
+# Create symlink to latest model (for easy access)
+cd ${PROJECT_ROOT}/models/
+rm -f generative_latest 2>/dev/null || true
+ln -s $(basename ${PERMANENT_MODEL_DIR}) generative_latest
+
+echo "✅ Results copied successfully!"
+echo "  Latest model: ${PROJECT_ROOT}/models/generative_latest -> $(basename ${PERMANENT_MODEL_DIR})"
+echo "  All models preserved in: ${PROJECT_ROOT}/models/"
+
+# Display storage usage summary
+echo "📊 Storage usage summary:"
+echo "  Fast storage used: $(du -sh ${TRAINING_DIR} | cut -f1)"
+echo "  Final model size: $(du -sh ${PERMANENT_MODEL_DIR} | cut -f1)"
 
 echo "========================================="
 echo "✅ Generative training completed successfully!"
 echo "End Time: $(date)"
 echo "Job Duration: $((SECONDS / 60)) minutes"
+echo "Model saved to: ${PERMANENT_MODEL_DIR}"
+echo "Results archived in: ${RESULT_DIR}"
 echo "========================================="
 
-# Package curated results snapshot for this job
-./scripts/hpc/consolidate_results.sh "$SLURM_JOB_ID" --tar || echo "Consolidation skipped/failed; continuing."
+# Note: No manual cleanup needed - /tmp is automatically cleaned when job ends
+echo "🧹 Fast local storage will be automatically cleaned when job completes"

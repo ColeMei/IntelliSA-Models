@@ -1,7 +1,7 @@
 #!/bin/bash
-# HPC Environment Setup Script for Spartan - Improved Version
+# HPC Environment Setup Script for Spartan - Optimized for local NVMe storage
 
-echo "🔧 Setting up HPC environment..."
+echo "🔧 Setting up HPC environment with fast local storage..."
 
 # Load required modules on Spartan (correct order per documentation)
 module purge 2>/dev/null || true
@@ -43,32 +43,32 @@ module list
 # Set environment variables
 export PROJECT_ID="punim2518"
 export PROJECT_ROOT="/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models"
-export TEMP_ROOT="/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/temp_storage"
+export FAST_STORAGE="/tmp"  # Use fast local NVMe storage
 
-# Cache directories (use temp storage for better I/O)
-export HF_HOME="${TEMP_ROOT}/model_cache/huggingface"
+# Cache directories (now on fast local storage)
+export HF_HOME="${FAST_STORAGE}/model_cache/huggingface"
 export HF_HUB_CACHE="${HF_HOME}/hub"
 export HF_DATASETS_CACHE="${HF_HOME}/datasets"
-export TORCH_HOME="${TEMP_ROOT}/model_cache/torch_cache"
-export WANDB_CACHE_DIR="${TEMP_ROOT}/model_cache/wandb_cache"
+export TORCH_HOME="${FAST_STORAGE}/model_cache/torch_cache"
+export WANDB_CACHE_DIR="${FAST_STORAGE}/model_cache/wandb_cache"
 
-# Create cache directories
+# Create cache directories on fast storage
 mkdir -p ${HF_HUB_CACHE} ${HF_DATASETS_CACHE} ${TORCH_HOME} ${WANDB_CACHE_DIR}
 
 # GPU settings - let SLURM handle GPU allocation
 if [ ! -z "$SLURM_JOB_ID" ]; then
-    echo "🔍 SLURM Job detected - GPU allocation:"
+    echo "🎯 SLURM Job detected - GPU allocation:"
     echo "  CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
     echo "  SLURM_GPUS: ${SLURM_GPUS}"
     echo "  SLURM_GPUS_ON_NODE: ${SLURM_GPUS_ON_NODE}"
+    echo "  Fast storage available: $(df -h /tmp | tail -1 | awk '{print $4}')"
 fi
 
-# Virtual environment setup - use temp storage for better performance
-VENV_PATH="${TEMP_ROOT}/venv_${SLURM_JOB_ID:-local}"
-
-# Create virtual environment if running in SLURM job or if doesn't exist locally
-if [ ! -z "$SLURM_JOB_ID" ] || [ ! -d "${PROJECT_ROOT}/environments/venv" ]; then
-    echo "🐍 Creating virtual environment at ${VENV_PATH}..."
+# Virtual environment setup - use fast local storage for SLURM jobs
+if [ ! -z "$SLURM_JOB_ID" ]; then
+    # Use fast local storage for job-specific venv
+    VENV_PATH="${FAST_STORAGE}/venv_${SLURM_JOB_ID}"
+    echo "🚀 Creating virtual environment on fast storage: ${VENV_PATH}..."
     python -m venv ${VENV_PATH}
     source ${VENV_PATH}/bin/activate
     
@@ -86,11 +86,16 @@ if [ ! -z "$SLURM_JOB_ID" ] || [ ! -d "${PROJECT_ROOT}/environments/venv" ]; the
         pip install torch torchvision torchaudio transformers datasets accelerate evaluate scikit-learn pandas numpy
     fi
     
-    echo "✅ Virtual environment created and packages installed"
+    echo "✅ Virtual environment created on fast storage"
 else
-    # Use existing local venv
-    echo "🐍 Using existing virtual environment..."
-    source ${PROJECT_ROOT}/environments/venv/bin/activate
+    # Use existing local venv for non-SLURM usage
+    if [ -d "${PROJECT_ROOT}/environments/venv" ]; then
+        echo "🔄 Using existing virtual environment..."
+        source ${PROJECT_ROOT}/environments/venv/bin/activate
+    else
+        echo "❌ No virtual environment found for local usage"
+        exit 1
+    fi
 fi
 
 # Verify installation
@@ -113,13 +118,13 @@ export PYTHONPATH="${PROJECT_ROOT}/src:${PROJECT_ROOT}:${PYTHONPATH}"
 if [ ! -z "$SLURM_JOB_ID" ]; then
     cleanup_venv() {
         echo "🧹 Cleaning up temporary virtual environment..."
-        rm -rf ${VENV_PATH}
+        rm -rf ${VENV_PATH} 2>/dev/null || true
     }
     trap cleanup_venv EXIT
 fi
 
 echo "✅ HPC environment ready!"
 echo "  Project root: ${PROJECT_ROOT}"
-echo "  Temp storage: ${TEMP_ROOT}"
+echo "  Fast storage: ${FAST_STORAGE}"
 echo "  Python path: ${PYTHONPATH}"
 echo "  Cache dirs: ${HF_HUB_CACHE}, ${HF_DATASETS_CACHE}, ${TORCH_HOME}, ${WANDB_CACHE_DIR}"
