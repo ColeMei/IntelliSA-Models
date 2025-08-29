@@ -42,22 +42,32 @@ evaluation/
 ### HPC Deployment (Recommended)
 
 ```bash
-# Evaluate both models
-sbatch scripts/hpc/evaluate_models.slurm both
+# Evaluate both models (default)
+sbatch scripts/hpc/evaluate_models.slurm
 
 # Single model evaluation
-sbatch scripts/hpc/evaluate_models.slurm generative /path/to/model
-sbatch scripts/hpc/evaluate_models.slurm encoder /path/to/model
+sbatch scripts/hpc/evaluate_models.slurm configs/evaluation_config.yaml generative
+sbatch scripts/hpc/evaluate_models.slurm configs/evaluation_config.yaml encoder
 ```
 
-### Configuration
+## Configuration
 
 ```yaml
 # configs/evaluation_config.yaml
 test_path: "data/processed/chef_test.jsonl"
 batch_size: 4
 save_predictions: true
-confusion_matrix: true
+
+models:
+  generative:
+    path: "models/generative_latest"
+    batch_size: 1
+  encoder:
+    path: "models/encoder_latest"
+    batch_size: 8
+
+generative_use_4bit: true
+max_new_tokens: 10
 ```
 
 ## Expected Output Structure
@@ -78,7 +88,16 @@ results/evaluation_TIMESTAMP_jobID/
 └── evaluation_latest -> [symlink to latest results]
 ```
 
-### Key Metrics Output
+## Key Features
+
+- **YAML-driven**: All configuration in one file
+- **Unified interface**: Single command for both models
+- **HPC optimized**: Fast local storage, SLURM integration
+- **Comprehensive metrics**: Accuracy, F1, precision, recall
+- **Visual reports**: HTML summaries, charts, confusion matrices
+- **Model comparison**: Side-by-side analysis and rankings
+
+## Results Format
 
 ```json
 {
@@ -95,53 +114,3 @@ results/evaluation_TIMESTAMP_jobID/
   }
 }
 ```
-
-## Key Features
-
-### 🚀 **Unified Interface**
-
-- Single command evaluates both model types
-- Automatic model detection and loading
-- Consistent output format across approaches
-
-### 📊 **Comprehensive Metrics**
-
-- Standard classification metrics (Acc, F1, P, R)
-- Per-smell type performance breakdown
-- Confusion matrices and confidence scores
-- Statistical significance testing
-
-### 🔄 **Model Comparison**
-
-- Side-by-side performance analysis
-- Visual comparisons (bar charts, radar plots)
-- HTML reports with rankings
-- Best model identification per metric
-
-### 💾 **HPC Optimized**
-
-- Fast local storage utilization
-- Memory-efficient batch processing
-- Proper SLURM resource management
-- Automatic result archiving
-
-### 🛡️ **Robust Processing**
-
-- Error handling for failed predictions
-- Memory optimization for large models
-- Batch size auto-adjustment
-- Comprehensive logging
-
-### 📈 **Rich Visualization**
-
-- Performance comparison charts
-- Per-smell breakdown plots
-- Confusion matrix heatmaps
-- Interactive HTML reports
-
-## Quick Start
-
-1. **Setup**: Ensure trained models are in `models/generative_latest` and `models/encoder_latest`
-2. **Run**: `sbatch scripts/hpc/evaluate_models.slurm both`
-3. **Results**: Check `results/evaluation_latest/` for outputs
-4. **Analysis**: Open `comparison/comparison_report.html` for visual summary
