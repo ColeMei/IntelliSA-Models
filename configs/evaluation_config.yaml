@@ -1,0 +1,47 @@
+# Evaluation configuration for Chef detection models
+
+# General settings
+output_dir: "results/evaluation"
+batch_size: 4
+max_samples: null # null for full dataset, set number for testing
+save_predictions: true
+confusion_matrix: true
+
+# Test data path
+test_path: "data/processed/chef_test.jsonl"
+
+# Model paths (update these with your actual paths)
+models:
+  generative:
+    path: "models/generative_latest"
+    batch_size: 1 # Smaller batch size for large generative models
+  encoder:
+    path: "models/encoder_latest"
+    batch_size: 8 # Larger batch size for smaller encoder models
+
+# Evaluation metrics to compute
+metrics:
+  - accuracy
+  - precision
+  - recall
+  - f1
+  - confusion_matrix
+  - per_smell_metrics
+
+# Visualization settings
+plots:
+  performance_comparison: true
+  confusion_matrices: true
+  per_smell_breakdown: true
+  radar_chart: true
+
+# Report generation
+reports:
+  html: true
+  json: true
+  csv: true
+
+# Memory optimization
+memory_optimization:
+  clear_cache: true
+  batch_processing: true
