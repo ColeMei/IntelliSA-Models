@@ -19,6 +19,10 @@ models:
     path: "models/encoder_latest"
     batch_size: 8 # Larger batch size for smaller encoder models
 
+# Generative model specific settings
+generative_use_4bit: true
+max_new_tokens: 10
+
 # Evaluation metrics to compute
 metrics:
   - accuracy

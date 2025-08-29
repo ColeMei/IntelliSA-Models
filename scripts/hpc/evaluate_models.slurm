@@ -64,38 +64,33 @@ echo "✅ Test data staged successfully"
 export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH}"
 export TOKENIZERS_PARALLELISM=false
 
-# Check which models to evaluate based on command line args or available models
-APPROACH=${1:-"both"}  # Can be: generative, encoder, or both
-GENERATIVE_MODEL_PATH=${2:-"${PROJECT_ROOT}/models/generative_latest"}
-ENCODER_MODEL_PATH=${3:-"${PROJECT_ROOT}/models/encoder_latest"}
+# Load configuration from YAML file
+CONFIG_FILE=${1:-"${PROJECT_ROOT}/configs/evaluation_config.yaml"}
+APPROACH=${2:-"both"}  # Can be: generative, encoder, or both
 
 echo "🎯 Evaluation approach: ${APPROACH}"
-echo "🤖 Generative model: ${GENERATIVE_MODEL_PATH}"
-echo "🤖 Encoder model: ${ENCODER_MODEL_PATH}"
+echo "📋 Config file: ${CONFIG_FILE}"
+
+# Validate config file exists
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "❌ Config file not found: ${CONFIG_FILE}"
+    exit 1
+fi
 
 cd ${PROJECT_ROOT}
 
 # Function to evaluate single model
 evaluate_single_model() {
     local approach=$1
-    local model_path=$2
-    local output_suffix=$3
-    
-    if [[ ! -d "${model_path}" ]]; then
-        echo "⚠️ Model not found: ${model_path}"
-        return 1
-    fi
+    local output_suffix=$2
     
     echo "🚀 Evaluating ${approach} model..."
     
     srun --unbuffered python scripts/evaluate_models.py \
         --approach ${approach} \
-        --model-path ${model_path} \
+        --config ${CONFIG_FILE} \
         --test-path ${DATA_CACHE}/chef_test.jsonl \
-        --output-dir ${RESULTS_CACHE}/${approach}_${output_suffix} \
-        --batch-size 4 \
-        --save-predictions \
-        --confusion-matrix 2>&1 | tee ${TEMP_LOGS}/${approach}_evaluation_${SLURM_JOB_ID}.log
+        --output-dir ${RESULTS_CACHE}/${approach}_${output_suffix} 2>&1 | tee ${TEMP_LOGS}/${approach}_evaluation_${SLURM_JOB_ID}.log
     
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
@@ -111,7 +106,7 @@ evaluate_single_model() {
 EVAL_SUCCESS=0
 
 if [[ "${APPROACH}" == "generative" ]] || [[ "${APPROACH}" == "both" ]]; then
-    evaluate_single_model "generative" "${GENERATIVE_MODEL_PATH}" "eval"
+    evaluate_single_model "generative" "eval"
     GENERATIVE_EXIT=$?
     if [ $GENERATIVE_EXIT -ne 0 ]; then
         EVAL_SUCCESS=1
@@ -119,7 +114,7 @@ if [[ "${APPROACH}" == "generative" ]] || [[ "${APPROACH}" == "both" ]]; then
 fi
 
 if [[ "${APPROACH}" == "encoder" ]] || [[ "${APPROACH}" == "both" ]]; then
-    evaluate_single_model "encoder" "${ENCODER_MODEL_PATH}" "eval"
+    evaluate_single_model "encoder" "eval"
     ENCODER_EXIT=$?
     if [ $ENCODER_EXIT -ne 0 ]; then
         EVAL_SUCCESS=1
@@ -132,11 +127,9 @@ if [[ "${APPROACH}" == "both" ]] && [ $EVAL_SUCCESS -eq 0 ]; then
     
     srun --unbuffered python scripts/evaluate_models.py \
         --approach compare \
-        --model-paths ${GENERATIVE_MODEL_PATH} ${ENCODER_MODEL_PATH} \
+        --config ${CONFIG_FILE} \
         --test-path ${DATA_CACHE}/chef_test.jsonl \
-        --output-dir ${RESULTS_CACHE}/comparison \
-        --save-predictions \
-        --confusion-matrix 2>&1 | tee ${TEMP_LOGS}/comparison_${SLURM_JOB_ID}.log
+        --output-dir ${RESULTS_CACHE}/comparison 2>&1 | tee ${TEMP_LOGS}/comparison_${SLURM_JOB_ID}.log
     
     COMPARISON_EXIT=$?
     if [ $COMPARISON_EXIT -ne 0 ]; then

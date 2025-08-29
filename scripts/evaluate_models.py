@@ -33,26 +33,32 @@ from evaluation.encoder_evaluator import EncoderEvaluator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def evaluate_generative(args):
+def evaluate_generative(args, config_data):
     """Evaluate generative model (CodeLLaMA with LoRA)."""
     logger.info("🚀 Evaluating generative model...")
     
     evaluator = GenerativeEvaluator(
         model_path=args.model_path,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        use_4bit=config_data.get('generative_use_4bit', True),
+        max_new_tokens=config_data.get('max_new_tokens', 10)
     )
     
-    # Run evaluation
+    # Use config values with CLI overrides
+    batch_size = args.batch_size if hasattr(args, 'batch_size') and args.batch_size != 4 else config_data.get('models', {}).get('generative', {}).get('batch_size', args.batch_size)
+    max_samples = args.max_samples if args.max_samples is not None else config_data.get('max_samples')
+    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else config_data.get('save_predictions', True)
+    
     results = evaluator.evaluate(
         test_path=args.test_path,
-        batch_size=args.batch_size,
-        max_samples=args.max_samples
+        batch_size=batch_size,
+        max_samples=max_samples,
+        save_predictions=save_predictions
     )
     
-    logger.info(f"✅ Generative model evaluation completed.")
     return results
 
-def evaluate_encoder(args):
+def evaluate_encoder(args, config_data):
     """Evaluate encoder model (CodeBERT/CodeT5)."""
     logger.info("🚀 Evaluating encoder model...")
     
@@ -61,17 +67,21 @@ def evaluate_encoder(args):
         output_dir=args.output_dir
     )
     
-    # Run evaluation
+    # Use config values with CLI overrides
+    batch_size = args.batch_size if hasattr(args, 'batch_size') and args.batch_size != 4 else config_data.get('models', {}).get('encoder', {}).get('batch_size', args.batch_size)
+    max_samples = args.max_samples if args.max_samples is not None else config_data.get('max_samples')
+    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else config_data.get('save_predictions', True)
+    
     results = evaluator.evaluate(
         test_path=args.test_path,
-        batch_size=args.batch_size,
-        max_samples=args.max_samples
+        batch_size=batch_size,
+        max_samples=max_samples,
+        save_predictions=save_predictions
     )
     
-    logger.info(f"✅ Encoder model evaluation completed.")
     return results
 
-def compare_models(args):
+def compare_models(args, config_data):
     """Compare multiple models."""
     logger.info("🔄 Comparing models...")
     
@@ -152,13 +162,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Validation
-    if args.approach != "compare" and not args.model_path:
-        parser.error("--model-path is required for single model evaluation")
-    
-    if args.approach == "compare" and not args.model_paths:
-        parser.error("--model-paths is required for model comparison")
-    
     # Load config if provided
     config_data: Dict[str, Any] = {}
     if args.config is not None:
@@ -168,10 +171,55 @@ def main():
             with open(args.config, 'r') as f:
                 config_data = yaml.safe_load(f) or {}
     
-    # Set default output directory
+    # Apply config defaults where CLI args not provided
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         args.output_dir = config_data.get("output_dir", f"results/evaluation_{timestamp}")
+    
+    if args.test_path == "data/processed/chef_test.jsonl":  # Default value
+        args.test_path = config_data.get("test_path", args.test_path)
+    
+    if args.batch_size == 4:  # Default value
+        args.batch_size = config_data.get("batch_size", args.batch_size)
+    
+    if args.max_samples is None:
+        args.max_samples = config_data.get("max_samples")
+    
+    # Add missing arguments from config
+    args.save_predictions = getattr(args, 'save_predictions', config_data.get('save_predictions', True))
+    args.confusion_matrix = getattr(args, 'confusion_matrix', config_data.get('confusion_matrix', True))
+    
+    # Set model paths from config if not provided via CLI
+    if args.approach != "compare" and not args.model_path:
+        if args.approach == "generative":
+            args.model_path = config_data.get('models', {}).get('generative', {}).get('path')
+        elif args.approach == "encoder":
+            args.model_path = config_data.get('models', {}).get('encoder', {}).get('path')
+        
+        if not args.model_path:
+            parser.error(f"--model-path is required for {args.approach} evaluation (not found in config)")
+    
+    if args.approach == "compare" and not args.model_paths:
+        generative_path = config_data.get('models', {}).get('generative', {}).get('path')
+        encoder_path = config_data.get('models', {}).get('encoder', {}).get('path')
+        
+        if generative_path and encoder_path:
+            args.model_paths = [generative_path, encoder_path]
+        else:
+            parser.error("--model-paths is required for model comparison (not found in config)")
+    
+    # Log configuration summary
+    logger.info(f"📋 Configuration loaded from: {args.config if args.config else 'defaults'}")
+    logger.info(f"🎯 Approach: {args.approach}")
+    if args.approach != "compare":
+        logger.info(f"🤖 Model path: {args.model_path}")
+    else:
+        logger.info(f"🤖 Model paths: {args.model_paths}")
+    logger.info(f"📊 Test data: {args.test_path}")
+    logger.info(f"📁 Output directory: {args.output_dir}")
+    logger.info(f"🔢 Batch size: {args.batch_size}")
+    if args.max_samples:
+        logger.info(f"📈 Max samples: {args.max_samples}")
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -214,11 +262,11 @@ def main():
     
     try:
         if args.approach == "generative":
-            results = evaluate_generative(args)
+            results = evaluate_generative(args, config_data)
         elif args.approach == "encoder":
-            results = evaluate_encoder(args)
+            results = evaluate_encoder(args, config_data)
         elif args.approach == "compare":
-            results = compare_models(args)
+            results = compare_models(args, config_data)
         
         # Save results
         results_file = Path(args.output_dir) / "evaluation_results.json"
