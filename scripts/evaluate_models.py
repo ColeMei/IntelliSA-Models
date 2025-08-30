@@ -52,7 +52,11 @@ def evaluate_generative(args, config_data):
     # Use config values with CLI overrides - prefer model-specific settings
     gen_model_config = config_data.get('models', {}).get('generative', {})
     model_batch_size = gen_model_config.get('batch_size')
-    batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+    if model_batch_size is not None:
+        batch_size = model_batch_size
+        logger.info(f"Applied model-specific batch_size for generative: {batch_size}")
+    else:
+        batch_size = args.batch_size
     args.batch_size = batch_size  # Update args with final value
 
     eval_config = config_data.get('evaluation', {})
@@ -81,7 +85,11 @@ def evaluate_encoder(args, config_data):
     # Use config values with CLI overrides - prefer model-specific settings
     enc_model_config = config_data.get('models', {}).get('encoder', {})
     model_batch_size = enc_model_config.get('batch_size')
-    batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+    if model_batch_size is not None:
+        batch_size = model_batch_size
+        logger.info(f"Applied model-specific batch_size for encoder: {batch_size}")
+    else:
+        batch_size = args.batch_size
     args.batch_size = batch_size  # Update args with final value
 
     eval_config = config_data.get('evaluation', {})
@@ -201,6 +209,9 @@ def main():
     
     # Apply config defaults where CLI args not provided
     eval_config = config_data.get('evaluation', {})
+    logger.info(f"Loaded config sections: {list(config_data.keys())}")
+    logger.info(f"Evaluation config: {eval_config}")
+    logger.info(f"Models config: {config_data.get('models', {})}")
 
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -209,15 +220,23 @@ def main():
     if args.test_path == "data/processed/chef_test.jsonl":  # Default value
         args.test_path = eval_config.get("test_path", args.test_path)
 
-    if args.batch_size == 4:  # Default value
-        args.batch_size = eval_config.get("batch_size", args.batch_size)
+    # Apply global config values (model-specific settings will override these later)
+    if 'batch_size' in eval_config:
+        args.batch_size = eval_config["batch_size"]
+        logger.info(f"Applied global batch_size from config: {args.batch_size}")
 
     if args.max_samples is None:
         args.max_samples = eval_config.get("max_samples")
 
-    # Add missing arguments from config
-    if not hasattr(args, 'save_predictions') or args.save_predictions is None:
-        args.save_predictions = eval_config.get('save_predictions', True)
+    # Add missing arguments from config - always apply config values when available
+    if 'save_predictions' in eval_config:
+        args.save_predictions = eval_config['save_predictions']
+        logger.info(f"Applied save_predictions from config: {args.save_predictions}")
+
+    logger.info(f"Final args values before evaluation:")
+    logger.info(f"  batch_size: {args.batch_size}")
+    logger.info(f"  save_predictions: {args.save_predictions}")
+    logger.info(f"  max_samples: {args.max_samples}")
     
     # Set model paths from config if not provided via CLI
     if args.approach != "compare" and not args.model_path:
