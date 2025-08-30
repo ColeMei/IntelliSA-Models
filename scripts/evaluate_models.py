@@ -37,18 +37,27 @@ def evaluate_generative(args, config_data):
     """Evaluate generative model (CodeLLaMA with LoRA)."""
     logger.info("Evaluating generative model")
     
+    # Get model-specific config for generative model
+    model_config = config_data.get('models', {}).get('generative', {})
+    use_4bit = model_config.get('use_4bit', True)
+    max_new_tokens = model_config.get('max_new_tokens', 10)
+
     evaluator = GenerativeEvaluator(
         model_path=args.model_path,
         output_dir=args.output_dir,
-        use_4bit=config_data.get('generative_use_4bit', True),
-        max_new_tokens=config_data.get('max_new_tokens', 10)
+        use_4bit=use_4bit,
+        max_new_tokens=max_new_tokens
     )
     
-    # Use config values with CLI overrides
-    batch_size = args.batch_size if hasattr(args, 'batch_size') and args.batch_size != 4 else config_data.get('models', {}).get('generative', {}).get('batch_size', args.batch_size)
-    max_samples = args.max_samples if args.max_samples is not None else config_data.get('max_samples')
-    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else config_data.get('save_predictions', True)
-    
+    # Use config values with CLI overrides - prefer model-specific settings
+    gen_model_config = config_data.get('models', {}).get('generative', {})
+    model_batch_size = gen_model_config.get('batch_size')
+    batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+
+    eval_config = config_data.get('evaluation', {})
+    max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
+    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
+
     results = evaluator.evaluate(
         test_path=args.test_path,
         batch_size=batch_size,
@@ -67,10 +76,14 @@ def evaluate_encoder(args, config_data):
         output_dir=args.output_dir
     )
     
-    # Use config values with CLI overrides
-    batch_size = args.batch_size if hasattr(args, 'batch_size') and args.batch_size != 4 else config_data.get('models', {}).get('encoder', {}).get('batch_size', args.batch_size)
-    max_samples = args.max_samples if args.max_samples is not None else config_data.get('max_samples')
-    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else config_data.get('save_predictions', True)
+    # Use config values with CLI overrides - prefer model-specific settings
+    enc_model_config = config_data.get('models', {}).get('encoder', {})
+    model_batch_size = enc_model_config.get('batch_size')
+    batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+
+    eval_config = config_data.get('evaluation', {})
+    max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
+    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
     
     results = evaluator.evaluate(
         test_path=args.test_path,
@@ -84,23 +97,34 @@ def evaluate_encoder(args, config_data):
 def compare_models(args, config_data):
     """Compare multiple models."""
     logger.info("Comparing models")
-    
+
     comparator = ModelComparator(output_dir=args.output_dir)
-    
-    # Load model results
+
+    # Load model results - look in evaluation output directories, not model directories
     model_results = {}
+    base_dir = Path(args.output_dir).parent  # Parent directory of comparison output
+
     for model_path in args.model_paths:
         model_name = Path(model_path).name
-        result_file = Path(model_path) / "evaluation_results.json"
+
+        # Look for results in evaluation subdirectories
+        if "generative" in model_name:
+            result_file = base_dir / "generative_eval" / "evaluation_results.json"
+        elif "encoder" in model_name:
+            result_file = base_dir / "encoder_eval" / "evaluation_results.json"
+        else:
+            # Fallback to model directory
+            result_file = Path(model_path) / "evaluation_results.json"
+
         if result_file.exists():
             with open(result_file, 'r') as f:
                 model_results[model_name] = json.load(f)
         else:
-            logger.warning(f"No results found for {model_name}")
-    
+            logger.warning(f"No results found for {model_name} at {result_file}")
+
     # Generate comparison
     comparison_results = comparator.compare_models(model_results, args.test_path)
-    
+
     logger.info(f"Model comparison completed.")
     return comparison_results
 
@@ -172,22 +196,23 @@ def main():
                 config_data = yaml.safe_load(f) or {}
     
     # Apply config defaults where CLI args not provided
+    eval_config = config_data.get('evaluation', {})
+
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        args.output_dir = config_data.get("output_dir", f"results/evaluation_{timestamp}")
-    
+        args.output_dir = eval_config.get("output_dir", f"results/evaluation_{timestamp}")
+
     if args.test_path == "data/processed/chef_test.jsonl":  # Default value
-        args.test_path = config_data.get("test_path", args.test_path)
-    
+        args.test_path = eval_config.get("test_path", args.test_path)
+
     if args.batch_size == 4:  # Default value
-        args.batch_size = config_data.get("batch_size", args.batch_size)
-    
+        args.batch_size = eval_config.get("batch_size", args.batch_size)
+
     if args.max_samples is None:
-        args.max_samples = config_data.get("max_samples")
-    
+        args.max_samples = eval_config.get("max_samples")
+
     # Add missing arguments from config
-    args.save_predictions = getattr(args, 'save_predictions', config_data.get('save_predictions', True))
-    args.confusion_matrix = getattr(args, 'confusion_matrix', config_data.get('confusion_matrix', True))
+    args.save_predictions = getattr(args, 'save_predictions', eval_config.get('save_predictions', True))
     
     # Set model paths from config if not provided via CLI
     if args.approach != "compare" and not args.model_path:
