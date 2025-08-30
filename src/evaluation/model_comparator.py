@@ -114,9 +114,9 @@ class ModelComparator:
         # Radar chart for overall performance
         self._create_radar_chart(df)
         
-        # Confusion matrix comparison (if available)
-        # This would require access to the detailed results
-        
+        # Confusion matrix comparison
+        self._create_confusion_matrix_plots(model_results)
+
         logger.info("Performance plots created")
     
     def _create_radar_chart(self, df: pd.DataFrame):
@@ -149,7 +149,85 @@ class ModelComparator:
         
         plt.savefig(self.output_dir / "radar_comparison.png", dpi=300, bbox_inches='tight')
         plt.close()
-    
+
+    def _create_confusion_matrix_plots(self, model_results: Dict[str, Dict]):
+        """Create confusion matrix plots for each model."""
+        num_models = len(model_results)
+        if num_models == 0:
+            return
+
+        # Create subplot grid
+        cols = min(2, num_models)
+        rows = (num_models + cols - 1) // cols
+
+        fig, axes = plt.subplots(rows, cols, figsize=(6*cols, 5*rows))
+        if num_models == 1:
+            axes = [axes]
+        else:
+            axes = axes.flatten()
+
+        fig.suptitle('Confusion Matrix Comparison', fontsize=16)
+
+        for i, (model_name, results) in enumerate(model_results.items()):
+            if i >= len(axes):
+                break
+
+            ax = axes[i]
+            cm_data = results.get('confusion_matrix', {})
+
+            # Extract confusion matrix values
+            tn = cm_data.get('tn', 0)
+            fp = cm_data.get('fp', 0)
+            fn = cm_data.get('fn', 0)
+            tp = cm_data.get('tp', 0)
+
+            # Create confusion matrix array
+            cm_array = np.array([[tn, fp], [fn, tp]])
+
+            # Plot confusion matrix
+            im = ax.imshow(cm_array, interpolation='nearest', cmap=plt.cm.Blues, alpha=0.8)
+
+            # Add text annotations
+            thresh = cm_array.max() / 2.
+            for i_cm in range(cm_array.shape[0]):
+                for j_cm in range(cm_array.shape[1]):
+                    ax.text(j_cm, i_cm, format(cm_array[i_cm, j_cm], 'd'),
+                           ha="center", va="center",
+                           color="white" if cm_array[i_cm, j_cm] > thresh else "black",
+                           fontsize=14, fontweight='bold')
+
+            ax.set_title(f'{model_name}', fontsize=12, pad=20)
+            ax.set_xlabel('Predicted label')
+            ax.set_ylabel('True label')
+
+            # Set tick labels
+            ax.set_xticks([0, 1])
+            ax.set_yticks([0, 1])
+            ax.set_xticklabels(['FP', 'TP'])
+            ax.set_yticklabels(['FP', 'TP'])
+
+            # Add metrics annotation
+            metrics = results.get('metrics', {})
+            accuracy = metrics.get('accuracy', 0)
+            precision = metrics.get('precision', 0)
+            recall = metrics.get('recall', 0)
+            f1 = metrics.get('f1', 0)
+
+            metrics_text = '.3f'
+            ax.text(0.02, 0.98, metrics_text, transform=ax.transAxes,
+                   fontsize=10, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+        # Hide unused subplots
+        for i in range(len(model_results), len(axes)):
+            axes[i].set_visible(False)
+
+        plt.tight_layout()
+        plt.savefig(self.output_dir / "confusion_matrices.png", dpi=300, bbox_inches='tight')
+        plt.close()
+
+        logger.info("Confusion matrix plots created")
+
     def _compare_per_smell_performance(self, model_results: Dict[str, Dict]) -> Dict:
         """Compare per-smell performance across models."""
         smell_comparison = {}
@@ -317,6 +395,8 @@ class ModelComparator:
                 <img src="performance_comparison.png" alt="Performance Comparison" style="max-width: 100%;"/>
                 <br><br>
                 <img src="radar_comparison.png" alt="Radar Chart" style="max-width: 100%;"/>
+                <br><br>
+                <img src="confusion_matrices.png" alt="Confusion Matrix Comparison" style="max-width: 100%;"/>
             </div>
             
             <h2>Ranking</h2>
