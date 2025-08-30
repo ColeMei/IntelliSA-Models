@@ -233,9 +233,16 @@ class EncoderEvaluator:
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
+        # Clean up temp_eval directory
+        import shutil
+        temp_eval_dir = self.output_dir / "temp_eval"
+        if temp_eval_dir.exists():
+            shutil.rmtree(temp_eval_dir)
+            logger.debug(f"Cleaned up temporary directory: {temp_eval_dir}")
+
         logger.info(f"Evaluation completed in {evaluation_time:.2f} seconds")
         logger.info(f"Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
-        
+
         return results
     
     def _calculate_per_smell_metrics(self, detailed_results: List[Dict]) -> Dict:
