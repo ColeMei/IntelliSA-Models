@@ -53,10 +53,12 @@ def evaluate_generative(args, config_data):
     gen_model_config = config_data.get('models', {}).get('generative', {})
     model_batch_size = gen_model_config.get('batch_size')
     batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+    args.batch_size = batch_size  # Update args with final value
 
     eval_config = config_data.get('evaluation', {})
     max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
     save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
+    args.save_predictions = save_predictions  # Update args with final value
 
     results = evaluator.evaluate(
         test_path=args.test_path,
@@ -80,10 +82,12 @@ def evaluate_encoder(args, config_data):
     enc_model_config = config_data.get('models', {}).get('encoder', {})
     model_batch_size = enc_model_config.get('batch_size')
     batch_size = model_batch_size if model_batch_size is not None else args.batch_size
+    args.batch_size = batch_size  # Update args with final value
 
     eval_config = config_data.get('evaluation', {})
     max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
     save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
+    args.save_predictions = save_predictions  # Update args with final value
     
     results = evaluator.evaluate(
         test_path=args.test_path,
@@ -212,7 +216,8 @@ def main():
         args.max_samples = eval_config.get("max_samples")
 
     # Add missing arguments from config
-    args.save_predictions = getattr(args, 'save_predictions', eval_config.get('save_predictions', True))
+    if not hasattr(args, 'save_predictions') or args.save_predictions is None:
+        args.save_predictions = eval_config.get('save_predictions', True)
     
     # Set model paths from config if not provided via CLI
     if args.approach != "compare" and not args.model_path:
@@ -272,7 +277,6 @@ def main():
         "batch_size": args.batch_size,
         "max_samples": args.max_samples,
         "save_predictions": args.save_predictions,
-        "confusion_matrix": args.confusion_matrix,
         "timestamp": datetime.now().isoformat(),
     }
     
