@@ -1,51 +1,45 @@
 # Evaluation configuration for Chef detection models
 
-# General settings
-output_dir: "results/evaluation"
-batch_size: 4
-max_samples: null # null for full dataset, set number for testing
-save_predictions: true
-confusion_matrix: true
+# Core evaluation settings
+evaluation:
+  # Global settings
+  batch_size: 4
+  max_samples: null # null for full dataset, set number for testing
+  save_predictions: true
 
-# Test data path
-test_path: "data/processed/chef_test.jsonl"
+  # Data configuration
+  test_path: "data/processed/chef_test.jsonl"
+  output_dir: "results/evaluation"
 
-# Model paths (update these with your actual paths)
+  # Metrics to compute
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+# Model configurations
 models:
   generative:
     path: "models/generative_latest"
     batch_size: 1 # Smaller batch size for large generative models
+    use_4bit: true
+    max_new_tokens: 10
   encoder:
     path: "models/encoder_latest"
     batch_size: 8 # Larger batch size for smaller encoder models
 
-# Generative model specific settings
-generative_use_4bit: true
-max_new_tokens: 10
+# Output configuration
+output:
+  # Report generation
+  reports:
+    html: true
+    json: true
 
-# Evaluation metrics to compute
-metrics:
-  - accuracy
-  - precision
-  - recall
-  - f1
-  - confusion_matrix
-  - per_smell_metrics
-
-# Visualization settings
-plots:
-  performance_comparison: true
-  confusion_matrices: true
-  per_smell_breakdown: true
-  radar_chart: true
-
-# Report generation
-reports:
-  html: true
-  json: true
-  csv: true
-
-# Memory optimization
-memory_optimization:
-  clear_cache: true
-  batch_processing: true
+  # Visualization settings
+  plots:
+    performance_comparison: true
+    confusion_matrices: true
+    radar_chart: true
