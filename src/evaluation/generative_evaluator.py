@@ -98,7 +98,7 @@ class GenerativeEvaluator:
         logger.info(f"Loaded {len(data)} test samples")
         return data
     
-    def _predict_single(self, input_text: str) -> Tuple[str, float]:
+    def _predict_single(self, input_text: str, sample_id: int) -> Tuple[str, float]:
         """Make prediction on single input."""
         # Format input properly
         formatted_input = f"### Instruction:\n{input_text}\n\n### Response:\n"
@@ -129,8 +129,11 @@ class GenerativeEvaluator:
             skip_special_tokens=True
         ).strip()
 
-        # DEBUG: Log raw generated text
-        logger.debug(f"Raw generated text: '{generated_text}'")
+        # INFO: Log raw generated text (for debugging model output)
+        logger.info(f"Raw generated text: '{generated_text}'")
+
+        # INFO: Log prediction result for each sample
+        logger.info(f"Sample {sample_id}: Processing prediction...")
 
         # Extract prediction from generated text
         # Model outputs JSON: {"decision":"YES|NO","confidence":0.0-1.0}
@@ -140,36 +143,41 @@ class GenerativeEvaluator:
             json_match = re.search(r'\{.*\}', generated_text)
             if json_match:
                 json_str = json_match.group()
-                logger.debug(f"Extracted JSON string: '{json_str}'")  # DEBUG: Log extracted JSON
+                logger.info(f"Extracted JSON string: '{json_str}'")  # INFO: Log extracted JSON
                 response_data = json.loads(json_str)
 
                 decision = response_data.get("decision", "").upper()
                 confidence = float(response_data.get("confidence", 0.5))
 
-                # DEBUG: Log parsed values
-                logger.debug(f"Parsed decision: '{decision}', confidence: {confidence}")
+                # INFO: Log parsed values
+                logger.info(f"Parsed decision: '{decision}', confidence: {confidence}")
 
                 # Map YES/NO to TP/FP
                 if decision == "YES":
                     prediction = "TP"  # Smell detected
+                    logger.info(f"Sample {sample_id}: Successfully parsed YES -> TP")
                 elif decision == "NO":
                     prediction = "FP"  # No smell detected
+                    logger.info(f"Sample {sample_id}: Successfully parsed NO -> FP")
                 else:
-                    logger.debug(f"Invalid decision value: '{decision}' - falling back to FP")
+                    logger.info(f"Sample {sample_id}: Invalid decision '{decision}' - falling back to FP")
                     prediction = "FP"
                     confidence = 0.5
             else:
                 # Fallback if no JSON found
-                logger.debug("No JSON pattern found in generated text - falling back to FP")
+                logger.info(f"Sample {sample_id}: No JSON found in response - falling back to FP")
                 prediction = "FP"
                 confidence = 0.5
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             # If parsing fails, default to FP with low confidence
-            logger.debug(f"JSON parsing failed: {e} - falling back to FP")
+            logger.info(f"Sample {sample_id}: JSON parsing failed ({type(e).__name__}) - falling back to FP")
             prediction = "FP"
             confidence = 0.5
-        
+
+        # INFO: Log final prediction result
+        logger.info(f"Sample {sample_id}: Final prediction = {prediction}, confidence = {confidence}")
+
         return prediction, confidence
     
     def evaluate(
@@ -204,7 +212,7 @@ class GenerativeEvaluator:
                 true_label = sample['label']
                 
                 # Make prediction
-                pred_label, confidence = self._predict_single(input_text)
+                pred_label, confidence = self._predict_single(input_text, i)
                 
                 predictions.append(pred_label)
                 true_labels.append(true_label)
