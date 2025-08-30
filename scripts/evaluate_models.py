@@ -52,9 +52,9 @@ def evaluate_generative(args, config_data):
     # Use config values with CLI overrides - prefer model-specific settings
     gen_model_config = config_data.get('models', {}).get('generative', {})
     model_batch_size = gen_model_config.get('batch_size')
+
     if model_batch_size is not None:
         batch_size = model_batch_size
-        logger.info(f"Applied model-specific batch_size for generative: {batch_size}")
     else:
         batch_size = args.batch_size
     args.batch_size = batch_size  # Update args with final value
@@ -85,9 +85,9 @@ def evaluate_encoder(args, config_data):
     # Use config values with CLI overrides - prefer model-specific settings
     enc_model_config = config_data.get('models', {}).get('encoder', {})
     model_batch_size = enc_model_config.get('batch_size')
+
     if model_batch_size is not None:
         batch_size = model_batch_size
-        logger.info(f"Applied model-specific batch_size for encoder: {batch_size}")
     else:
         batch_size = args.batch_size
     args.batch_size = batch_size  # Update args with final value
@@ -108,7 +108,6 @@ def evaluate_encoder(args, config_data):
 
 def compare_models(args, config_data):
     """Compare multiple models."""
-    logger.info("Comparing models")
 
     comparator = ModelComparator(output_dir=args.output_dir)
 
@@ -209,9 +208,6 @@ def main():
     
     # Apply config defaults where CLI args not provided
     eval_config = config_data.get('evaluation', {})
-    logger.info(f"Loaded config sections: {list(config_data.keys())}")
-    logger.info(f"Evaluation config: {eval_config}")
-    logger.info(f"Models config: {config_data.get('models', {})}")
 
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -223,7 +219,6 @@ def main():
     # Apply global config values (model-specific settings will override these later)
     if 'batch_size' in eval_config:
         args.batch_size = eval_config["batch_size"]
-        logger.info(f"Applied global batch_size from config: {args.batch_size}")
 
     if args.max_samples is None:
         args.max_samples = eval_config.get("max_samples")
@@ -231,12 +226,6 @@ def main():
     # Add missing arguments from config - always apply config values when available
     if 'save_predictions' in eval_config:
         args.save_predictions = eval_config['save_predictions']
-        logger.info(f"Applied save_predictions from config: {args.save_predictions}")
-
-    logger.info(f"Final args values before evaluation:")
-    logger.info(f"  batch_size: {args.batch_size}")
-    logger.info(f"  save_predictions: {args.save_predictions}")
-    logger.info(f"  max_samples: {args.max_samples}")
     
     # Set model paths from config if not provided via CLI
     if args.approach != "compare" and not args.model_path:
@@ -257,34 +246,17 @@ def main():
         else:
             parser.error("--model-paths is required for model comparison (not found in config)")
     
+    # Create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+
     # Log configuration summary
     logger.info(f"Configuration loaded from: {args.config if args.config else 'defaults'}")
     logger.info(f"Approach: {args.approach}")
     if args.approach != "compare":
-        logger.info(f"Model path: {args.model_path}")
+        logger.info(f"Model: {args.model_path}")
     else:
-        logger.info(f"Model paths: {args.model_paths}")
-    logger.info(f"Test data: {args.test_path}")
-    logger.info(f"Output directory: {args.output_dir}")
-    logger.info(f"Batch size: {args.batch_size}")
-    if args.max_samples:
-        logger.info(f"Max samples: {args.max_samples}")
-    
-    # Create output directory
-    os.makedirs(args.output_dir, exist_ok=True)
-    
-    # Log configuration
-    logger.info(f"Evaluation configuration:")
-    logger.info(f"  Approach: {args.approach}")
-    if args.approach != "compare":
-        logger.info(f"  Model: {args.model_path}")
-    else:
-        logger.info(f"  Models: {args.model_paths}")
-    logger.info(f"  Test data: {args.test_path}")
-    logger.info(f"  Output: {args.output_dir}")
-    logger.info(f"  Batch size: {args.batch_size}")
-    if args.max_samples:
-        logger.info(f"  Max samples: {args.max_samples}")
+        logger.info(f"Models: {args.model_paths}")
+    logger.info(f"Batch size: {args.batch_size}, Test data: {args.test_path}, Output: {args.output_dir}")
     
     # Save evaluation config
     eval_config = {
@@ -316,26 +288,16 @@ def main():
         elif args.approach == "compare":
             results = compare_models(args, config_data)
         
-        # Save results
-        results_file = Path(args.output_dir) / "evaluation_results.json"
-        with open(results_file, 'w') as f:
-            json.dump(results, f, indent=2)
-        
-        logger.info(f"Evaluation results saved to {results_file}")
+        # Note: Results are already saved by individual evaluators or ModelComparator
+        # No need to duplicate the file
 
         # Print summary
         if "metrics" in results:
             metrics = results["metrics"]
-            logger.info(f"Evaluation Summary:")
-            logger.info(f"   Accuracy: {metrics.get('accuracy', 'N/A'):.4f}")
-            logger.info(f"   F1-Score: {metrics.get('f1', 'N/A'):.4f}")
-            logger.info(f"   Precision: {metrics.get('precision', 'N/A'):.4f}")
-            logger.info(f"   Recall: {metrics.get('recall', 'N/A'):.4f}")
+            logger.info(f"Results: Acc={metrics.get('accuracy', 0):.4f}, F1={metrics.get('f1', 0):.4f}, P={metrics.get('precision', 0):.4f}, R={metrics.get('recall', 0):.4f}")
 
         elapsed_time = time.time() - start_time
-        logger.info(f"Total evaluation time: {elapsed_time:.2f} seconds")
-
-        logger.info(f"Evaluation completed successfully!")
+        logger.info(f"Evaluation completed in {elapsed_time:.2f} seconds")
 
     except Exception as e:
         logger.error(f"Evaluation failed: {str(e)}")
