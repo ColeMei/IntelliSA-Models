@@ -1,4 +1,5 @@
 import json
+import re
 import torch
 import logging
 from pathlib import Path
@@ -129,17 +130,35 @@ class GenerativeEvaluator:
         ).strip()
         
         # Extract prediction from generated text
-        gen_upper = generated_text.upper()
-        if "TP" in gen_upper[:10]:
-            prediction = "TP"
-            confidence = 0.9  # High confidence for clear TP
-        elif "FP" in gen_upper[:10]:
+        # Model outputs JSON: {"decision":"YES|NO","confidence":0.0-1.0}
+        try:
+            # Try to parse JSON from the generated text
+            # Look for JSON pattern in the response
+            json_match = re.search(r'\{.*\}', generated_text)
+            if json_match:
+                json_str = json_match.group()
+                response_data = json.loads(json_str)
+
+                decision = response_data.get("decision", "").upper()
+                confidence = float(response_data.get("confidence", 0.5))
+
+                # Map YES/NO to TP/FP
+                if decision == "YES":
+                    prediction = "TP"  # Smell detected
+                elif decision == "NO":
+                    prediction = "FP"  # No smell detected
+                else:
+                    prediction = "FP"
+                    confidence = 0.5
+            else:
+                # Fallback if no JSON found
+                prediction = "FP"
+                confidence = 0.5
+
+        except (json.JSONDecodeError, ValueError, KeyError):
+            # If parsing fails, default to FP with low confidence
             prediction = "FP"
-            confidence = 0.9  # High confidence for clear FP
-        else:
-            # Default to FP if unclear
-            prediction = "FP"
-            confidence = 0.5  # Low confidence for unclear cases
+            confidence = 0.5
         
         return prediction, confidence
     
