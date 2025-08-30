@@ -125,10 +125,13 @@ class GenerativeEvaluator:
         
         # Decode only the new tokens
         generated_text = self.tokenizer.decode(
-            outputs[0][inputs['input_ids'].shape[1]:], 
+            outputs[0][inputs['input_ids'].shape[1]:],
             skip_special_tokens=True
         ).strip()
-        
+
+        # DEBUG: Log raw generated text
+        logger.debug(f"Raw generated text: '{generated_text}'")
+
         # Extract prediction from generated text
         # Model outputs JSON: {"decision":"YES|NO","confidence":0.0-1.0}
         try:
@@ -137,10 +140,14 @@ class GenerativeEvaluator:
             json_match = re.search(r'\{.*\}', generated_text)
             if json_match:
                 json_str = json_match.group()
+                logger.debug(f"Extracted JSON string: '{json_str}'")  # DEBUG: Log extracted JSON
                 response_data = json.loads(json_str)
 
                 decision = response_data.get("decision", "").upper()
                 confidence = float(response_data.get("confidence", 0.5))
+
+                # DEBUG: Log parsed values
+                logger.debug(f"Parsed decision: '{decision}', confidence: {confidence}")
 
                 # Map YES/NO to TP/FP
                 if decision == "YES":
@@ -148,15 +155,18 @@ class GenerativeEvaluator:
                 elif decision == "NO":
                     prediction = "FP"  # No smell detected
                 else:
+                    logger.debug(f"Invalid decision value: '{decision}' - falling back to FP")
                     prediction = "FP"
                     confidence = 0.5
             else:
                 # Fallback if no JSON found
+                logger.debug("No JSON pattern found in generated text - falling back to FP")
                 prediction = "FP"
                 confidence = 0.5
 
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
             # If parsing fails, default to FP with low confidence
+            logger.debug(f"JSON parsing failed: {e} - falling back to FP")
             prediction = "FP"
             confidence = 0.5
         
