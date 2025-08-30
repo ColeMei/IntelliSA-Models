@@ -44,7 +44,7 @@ class ModelComparator:
         df = pd.DataFrame(comparison_data)
         
         # Generate comparison plots
-        self._create_performance_plots(df)
+        self._create_performance_plots(df, model_results)
         
         # Generate per-smell comparison
         smell_comparison = self._compare_per_smell_performance(model_results)
@@ -83,7 +83,7 @@ class ModelComparator:
         
         return comparison_results
     
-    def _create_performance_plots(self, df: pd.DataFrame):
+    def _create_performance_plots(self, df: pd.DataFrame, model_results: Dict[str, Dict]):
         """Create performance comparison plots."""
         plt.style.use('default')
         
