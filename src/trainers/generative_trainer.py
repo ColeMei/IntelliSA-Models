@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from pathlib import Path
 import numpy as np
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,17 +35,40 @@ class ChefDetectionDataset(Dataset):
         with open(data_path, 'r') as f:
             for line in f:
                 sample = json.loads(line.strip())
-                # Use with_prompt field as input
-                input_text = sample['with_prompt']
-                # Target: TP or FP
-                target = sample['label']
+                
+                # Extract the instruction part from with_prompt
+                with_prompt = sample['with_prompt']
+                
+                # The with_prompt already contains the full instruction
+                # We need to separate instruction from expected response format
+                if 'Return ONLY JSON:' in with_prompt:
+                    # Split at "Return ONLY JSON:" to get just the instruction
+                    parts = with_prompt.split('Return ONLY JSON:')
+                    instruction = parts[0].strip()
+                    # Add back the response format requirement
+                    instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO","confidence":0.0-1.0}'
+                else:
+                    instruction = with_prompt
+                
+                # Create the expected JSON response based on label
+                label = sample['label']  # TP or FP
+                confidence = sample.get('confidence', 1.0)
+                
+                # Convert TP/FP to YES/NO
+                # TP = True Positive = vulnerability correctly identified = YES
+                # FP = False Positive = incorrectly flagged as vulnerability = NO
+                decision = "YES" if label == "TP" else "NO"
+                target_response = json.dumps({"decision": decision, "confidence": confidence})
                 
                 data.append({
-                    'input_text': input_text,
-                    'target': target,
-                    'smell': sample['smell'],
-                    'confidence': sample['confidence']
+                    'instruction': instruction,
+                    'target_response': target_response,
+                    'original_label': label,
+                    'confidence': confidence,
+                    'smell': sample['smell']
                 })
+        
+        logger.info(f"Loaded {len(data)} samples from {data_path}")
         return data
     
     def __len__(self):
@@ -53,39 +77,45 @@ class ChefDetectionDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.data[idx]
         
-        # Better formatting for instruction tuning
-        instruction = sample['input_text']
-        response = sample['target']
+        # Format using CodeLlama instruction template
+        instruction = sample['instruction']
+        response = sample['target_response']
         
-        # Format as conversation
-        full_text = f"### Instruction:\n{instruction}\n\n### Response:\n{response}"
+        # Use CodeLlama's instruction format
+        full_text = f"<s>[INST] {instruction} [/INST] {response}</s>"
         
-        # Tokenize
-        encoding = self.tokenizer(
+        # Tokenize the full conversation
+        full_encoding = self.tokenizer(
             full_text,
             truncation=True,
             max_length=self.max_length,
-            padding='max_length',
+            padding=False,  # Let the data collator handle padding
             return_tensors='pt'
         )
         
-        # Create labels - only compute loss on response tokens
-        labels = encoding['input_ids'].clone()
+        # Tokenize just the instruction part to find where response starts
+        instruction_part = f"<s>[INST] {instruction} [/INST] "
+        instruction_encoding = self.tokenizer(
+            instruction_part,
+            truncation=True,
+            max_length=self.max_length,
+            padding=False,
+            return_tensors='pt'
+        )
         
-        # Find where response starts and mask instruction tokens
-        instruction_part = f"### Instruction:\n{instruction}\n\n### Response:\n"
-        instruction_tokens = self.tokenizer(instruction_part, add_special_tokens=False)['input_ids']
-        instruction_length = len(instruction_tokens)
+        # Create labels for training - only compute loss on response tokens
+        labels = full_encoding['input_ids'].clone()
+        instruction_length = instruction_encoding['input_ids'].shape[1]
         
-        # Mask instruction tokens in labels
-        labels[:instruction_length] = -100
+        # Mask instruction tokens (set to -100 so they're ignored in loss computation)
+        labels[:, :instruction_length] = -100
         
         return {
-            'input_ids': encoding['input_ids'].squeeze(),
-            'attention_mask': encoding['attention_mask'].squeeze(),
+            'input_ids': full_encoding['input_ids'].squeeze(),
+            'attention_mask': full_encoding['attention_mask'].squeeze(), 
             'labels': labels.squeeze(),
-            # numeric label for evaluation convenience (TP=1, FP=0)
-            'label_id': 1 if response.strip().upper() == 'TP' else 0
+            # Keep numeric label for evaluation
+            'label_id': 1 if sample['original_label'] == 'TP' else 0
         }
 
 class GenerativeTrainer:
@@ -105,13 +135,13 @@ class GenerativeTrainer:
         self.output_dir = output_dir
         self.use_4bit = use_4bit
         
-        # Configure quantization for 32B model
+        # Configure quantization for large models
         if use_4bit:
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
+                bnb_4bit_compute_dtype=torch.bfloat16  # Better than float16
             )
         else:
             bnb_config = None
@@ -122,39 +152,45 @@ class GenerativeTrainer:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             
         # Initialize model with quantization
-        logger.info(f"Loading model {model_name} with {'4-bit' if use_4bit else '16-bit'} precision...")
+        logger.info(f"Loading model {model_name} with {'4-bit' if use_4bit else 'full'} precision...")
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             quantization_config=bnb_config,
             device_map="auto",
             trust_remote_code=True,
-            torch_dtype=torch.float16
+            torch_dtype=torch.bfloat16,
+            use_cache=False  # Disable cache for training
         )
         
-        # Prepare model for training if using quantization
+        # Prepare model for LoRA training if using quantization
         if use_4bit:
             self.model = prepare_model_for_kbit_training(self.model)
         
-        # Configure LoRA (config-driven)
+        # Configure LoRA
+        if lora_target_modules is None:
+            # Default target modules for CodeLlama
+            lora_target_modules = [
+                "q_proj", "v_proj", "k_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj"
+            ]
+        
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             r=lora_r,
             lora_alpha=lora_alpha,
             lora_dropout=lora_dropout,
-            target_modules=(lora_target_modules or [
-                "q_proj", "v_proj", "k_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj"
-            ]),
+            target_modules=lora_target_modules,
             bias="none"
         )
         
-        self.model.config.use_cache = False
-        # enable gradient checkpointing (older HF/torch versions do not support use_reentrant kwarg)
+        # Apply LoRA to the model
+        self.model = get_peft_model(self.model, lora_config)
+        
+        # Enable gradient checkpointing for memory efficiency
         try:
             self.model.gradient_checkpointing_enable(use_reentrant=False)
         except TypeError:
             self.model.gradient_checkpointing_enable()
-        self.model = get_peft_model(self.model, lora_config)
         
         # Print trainable parameters
         self.model.print_trainable_parameters()
@@ -166,6 +202,12 @@ class GenerativeTrainer:
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")
+        
+        # Print a sample for debugging
+        if len(self.train_dataset) > 0:
+            sample = self.train_dataset[0]
+            decoded_sample = self.tokenizer.decode(sample['input_ids'], skip_special_tokens=True)
+            logger.info(f"Sample training example:\n{decoded_sample[:500]}...")
     
     def train(
         self,
@@ -176,7 +218,6 @@ class GenerativeTrainer:
         save_steps: int = 100,
         eval_steps: int = 50,
         gradient_accumulation_steps: int = 4,
-        # TrainingArguments overrides from config
         evaluation_strategy: str = "steps",
         save_strategy: str = "steps",
         logging_steps: int = 10,
@@ -203,16 +244,12 @@ class GenerativeTrainer:
             load_best_model_at_end=load_best_model_at_end,
             metric_for_best_model=metric_for_best_model,
             greater_is_better=greater_is_better,
-            fp16=fp16,
+            bf16=True,  # Use bfloat16 instead of fp16 for better stability
             dataloader_pin_memory=False,
-            remove_unused_columns=True,
-            # Optimization for memory
-            dataloader_num_workers=4,
-            group_by_length=True,
-            # Better saving strategy
+            remove_unused_columns=False,  # Keep our custom fields
+            group_by_length=True,  # Group similar length sequences for efficiency
             save_total_limit=2,
-            # Report metrics
-            report_to=None
+            report_to=None  # Disable wandb
         )
         
         trainer = Trainer(
@@ -229,7 +266,7 @@ class GenerativeTrainer:
         
         logger.info("Starting training...")
         
-        # Clear cache before training
+        # Clear GPU cache before training
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             
@@ -241,59 +278,142 @@ class GenerativeTrainer:
         
         logger.info(f"Model saved to {self.output_dir}")
 
-        # Minimal post-training evaluation using constrained decoding to TP/FP
-        logger.info("Running minimal generation-based evaluation on validation set...")
-        labels: List[int] = []
-        preds: List[int] = []
-        self.model.eval()
-        for item in self.val_dataset:
-            input_ids = item['input_ids'].unsqueeze(0).to(self.model.device)
-            attention_mask = item['attention_mask'].unsqueeze(0).to(self.model.device)
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    max_new_tokens=3,
-                    do_sample=False,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
-                )
-            # Decode only generated continuation
-            gen = self.tokenizer.decode(
-                outputs[0][input_ids.shape[1]:], skip_special_tokens=True
-            ).strip()
-            # Extract label from tiny generation window
-            gen_upper = gen.upper()
-            pred_label = 1 if "TP" in gen_upper[:5] else (0 if "FP" in gen_upper[:5] else 0)
-            true_label = int(item.get('label_id', 0))
-            labels.append(true_label)
-            preds.append(pred_label)
-
-        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary', zero_division=0)
-        acc = accuracy_score(labels, preds)
-        metrics = {"gen_accuracy": acc, "gen_f1": f1, "gen_precision": precision, "gen_recall": recall}
-        logger.info(f"Generation eval metrics: {metrics}")
-        # Save metrics to file
-        try:
-            import json
-            with open(Path(self.output_dir) / "generation_eval_metrics.json", "w") as f:
-                f.write(json.dumps(metrics, indent=2))
-        except Exception:
-            pass
+        # Run generation-based evaluation
+        self._run_generation_evaluation()
     
-    def predict(self, input_text: str, max_new_tokens: int = 10) -> Dict:
+    def _run_generation_evaluation(self):
+        """Run evaluation using generation on validation set."""
+        logger.info("Running generation-based evaluation on validation set...")
+        
+        predictions = []
+        true_labels = []
+        
+        self.model.eval()
+        
+        # Evaluate on a subset for speed (you can increase this)
+        eval_samples = min(50, len(self.val_dataset))
+        
+        for i in range(eval_samples):
+            try:
+                item = self.val_dataset[i]
+                
+                # Get the instruction part by decoding and splitting
+                full_text = self.tokenizer.decode(item['input_ids'], skip_special_tokens=True)
+                
+                if '[/INST]' in full_text:
+                    instruction_part = full_text.split('[/INST]')[0] + '[/INST] '
+                else:
+                    # Fallback - use first half
+                    instruction_part = full_text[:len(full_text)//2]
+                
+                # Tokenize instruction
+                inputs = self.tokenizer(
+                    instruction_part,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=self.tokenizer.model_max_length - 50  # Leave room for response
+                ).to(self.model.device)
+                
+                # Generate response
+                with torch.no_grad():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=30,  # JSON response should be short
+                        do_sample=False,
+                        temperature=0.1,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                        eos_token_id=self.tokenizer.eos_token_id,
+                    )
+                
+                # Extract generated part
+                generated = self.tokenizer.decode(
+                    outputs[0][inputs['input_ids'].shape[1]:], 
+                    skip_special_tokens=True
+                ).strip()
+                
+                # Parse the JSON response
+                pred_label = self._extract_decision_from_response(generated)
+                true_label = item['label_id']
+                
+                predictions.append(pred_label)
+                true_labels.append(true_label)
+                
+                # Log first few examples for debugging
+                if i < 3:
+                    logger.info(f"Sample {i}: Generated='{generated}' -> Pred={pred_label}, True={true_label}")
+                    
+            except Exception as e:
+                logger.warning(f"Error processing sample {i}: {e}")
+                predictions.append(0)  # Default to negative prediction
+                true_labels.append(item['label_id'])
+        
+        # Calculate metrics
+        if predictions and true_labels:
+            accuracy = accuracy_score(true_labels, predictions)
+            precision, recall, f1, _ = precision_recall_fscore_support(
+                true_labels, predictions, average='binary', zero_division=0
+            )
+            
+            metrics = {
+                "generation_accuracy": accuracy,
+                "generation_precision": precision, 
+                "generation_recall": recall,
+                "generation_f1": f1,
+                "eval_samples": eval_samples
+            }
+            
+            logger.info(f"Generation evaluation metrics: {metrics}")
+            
+            # Save metrics
+            with open(Path(self.output_dir) / "generation_eval_metrics.json", "w") as f:
+                json.dump(metrics, f, indent=2)
+        else:
+            logger.warning("No valid predictions generated during evaluation")
+    
+    def _extract_decision_from_response(self, response: str) -> int:
+        """Extract YES/NO decision from model response and convert to binary label."""
+        try:
+            # Try to parse as JSON first
+            if '{' in response and '}' in response:
+                start = response.find('{')
+                end = response.find('}', start) + 1
+                json_str = response[start:end]
+                
+                # Clean up common JSON formatting issues
+                json_str = re.sub(r'([{,]\s*)(\w+):', r'\1"\2":', json_str)  # Quote keys
+                json_str = re.sub(r':\s*([^",}\s]+)([,}])', r': "\1"\2', json_str)  # Quote unquoted values
+                
+                try:
+                    parsed = json.loads(json_str)
+                    decision = parsed.get('decision', '').upper()
+                    return 1 if decision == 'YES' else 0
+                except json.JSONDecodeError:
+                    pass
+            
+            # Fallback: look for YES/NO keywords
+            response_upper = response.upper()
+            if 'YES' in response_upper:
+                return 1
+            elif 'NO' in response_upper:
+                return 0
+            else:
+                return 0  # Default to negative if unclear
+                
+        except Exception:
+            return 0  # Default to negative on any error
+    
+    def predict(self, input_text: str, max_new_tokens: int = 30) -> Dict:
         """Make prediction on new input."""
         self.model.eval()
         
-        # Format input properly
-        formatted_input = f"### Instruction:\n{input_text}\n\n### Response:\n"
+        # Format input with CodeLlama instruction template
+        formatted_input = f"<s>[INST] {input_text} [/INST] "
         
         inputs = self.tokenizer(
             formatted_input,
             return_tensors="pt",
             truncation=True,
-            max_length=512,
-            padding=True
+            max_length=self.tokenizer.model_max_length - max_new_tokens
         ).to(self.model.device)
         
         with torch.no_grad():
@@ -301,21 +421,23 @@ class GenerativeTrainer:
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
                 temperature=0.1,
-                top_p=0.9
+                pad_token_id=self.tokenizer.eos_token_id,
             )
         
-        # Decode only the new tokens
+        # Decode only the new generated tokens
         generated_text = self.tokenizer.decode(
             outputs[0][inputs['input_ids'].shape[1]:], 
             skip_special_tokens=True
         ).strip()
         
+        # Extract decision
+        decision = self._extract_decision_from_response(generated_text)
+        
         return {
-            'prediction': generated_text,
-            'confidence': 1.0,
+            'prediction': 'TP' if decision == 1 else 'FP',
+            'confidence': 1.0,  # Could extract from JSON if needed
+            'raw_response': generated_text,
             'full_response': self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         }
 
