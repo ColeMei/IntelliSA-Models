@@ -309,7 +309,7 @@ class GenerativeTrainer:
                     instruction_part,
                     return_tensors="pt",
                     truncation=True,
-                    max_length=self.tokenizer.model_max_length - 50  # Leave room for response
+                    max_length= 4096 - 50  # Leave room for response
                 ).to(self.model.device)
                 
                 # Generate response
@@ -412,7 +412,7 @@ class GenerativeTrainer:
             formatted_input,
             return_tensors="pt",
             truncation=True,
-            max_length=self.tokenizer.model_max_length - max_new_tokens
+            max_length= 4096 - max_new_tokens
         ).to(self.model.device)
         
         with torch.no_grad():
