@@ -128,7 +128,7 @@ class GenerativeEvaluator:
             formatted_input,
             return_tensors="pt",
             truncation=True,
-            max_length=self.tokenizer.model_max_length - self.max_new_tokens,  # Leave room for response
+            max_length=4096 - self.max_new_tokens,  # Leave room for response
             padding=False
         ).to(self.model.device)
         
@@ -150,7 +150,7 @@ class GenerativeEvaluator:
                 skip_special_tokens=True
             ).strip()
             
-            if sample_id < 5:  # Log first few for debugging
+            if sample_id < 10:  # Log first few for debugging
                 logger.info(f"Sample {sample_id} generated: '{generated_text}'")
             
             # Parse the response
