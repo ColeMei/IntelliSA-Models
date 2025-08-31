@@ -22,7 +22,7 @@ class GenerativeEvaluator:
         model_path: str,
         output_dir: str,
         use_4bit: bool = True,
-        max_new_tokens: int = 10,
+        max_new_tokens: int = 50,  # Increased for JSON response
     ):
         self.model_path = Path(model_path)
         self.output_dir = Path(output_dir)
@@ -55,7 +55,7 @@ class GenerativeEvaluator:
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
+                bnb_4bit_compute_dtype=torch.bfloat16  # Match training config
             )
         else:
             bnb_config = None
@@ -71,7 +71,8 @@ class GenerativeEvaluator:
             quantization_config=bnb_config,
             device_map="auto",
             trust_remote_code=True,
-            torch_dtype=torch.float16
+            torch_dtype=torch.bfloat16,  # Match training config
+            use_cache=True  # Enable cache for inference
         )
         
         # Load LoRA adapters
@@ -98,87 +99,116 @@ class GenerativeEvaluator:
         logger.info(f"Loaded {len(data)} test samples")
         return data
     
-    def _predict_single(self, input_text: str, sample_id: int) -> Tuple[str, float]:
-        """Make prediction on single input."""
-        # Format input properly
-        formatted_input = f"### Instruction:\n{input_text}\n\n### Response:\n"
+    def _format_instruction(self, with_prompt: str) -> str:
+        """Extract and format the instruction part from with_prompt."""
+        # The with_prompt contains the full instruction
+        # We need to extract just the instruction part and format it properly
+        if 'Return ONLY JSON:' in with_prompt:
+            # Split to get instruction part
+            parts = with_prompt.split('Return ONLY JSON:')
+            instruction = parts[0].strip()
+            # Add back the response format requirement
+            instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO","confidence":0.0-1.0}'
+        else:
+            instruction = with_prompt
         
+        return instruction
+    
+    def _predict_single(self, sample: Dict, sample_id: int) -> Tuple[str, float]:
+        """Make prediction on single input."""
+        # Extract and format instruction
+        raw_instruction = sample['with_prompt']
+        formatted_instruction = self._format_instruction(raw_instruction)
+        
+        # Use CodeLlama instruction format (matching training)
+        formatted_input = f"<s>[INST] {formatted_instruction} [/INST] "
+        
+        # Tokenize input
         inputs = self.tokenizer(
             formatted_input,
             return_tensors="pt",
             truncation=True,
-            max_length=512,
-            padding=True
+            max_length=self.tokenizer.model_max_length - self.max_new_tokens,  # Leave room for response
+            padding=False
         ).to(self.model.device)
         
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                temperature=0.1,
-                top_p=0.9,
-                num_return_sequences=1
-            )
-        
-        # Decode only the new tokens
-        generated_text = self.tokenizer.decode(
-            outputs[0][inputs['input_ids'].shape[1]:],
-            skip_special_tokens=True
-        ).strip()
-
-        # INFO: Log raw generated text (for debugging model output)
-        logger.info(f"Raw generated text: '{generated_text}'")
-
-        # INFO: Log prediction result for each sample
-        logger.info(f"Sample {sample_id}: Processing prediction...")
-
-        # Extract prediction from generated text
-        # Model outputs JSON: {"decision":"YES|NO","confidence":0.0-1.0}
         try:
-            # Try to parse JSON from the generated text
-            # Look for JSON pattern in the response
-            json_match = re.search(r'\{.*\}', generated_text)
-            if json_match:
-                json_str = json_match.group()
-                logger.info(f"Extracted JSON string: '{json_str}'")  # INFO: Log extracted JSON
-                response_data = json.loads(json_str)
-
-                decision = response_data.get("decision", "").upper()
-                confidence = float(response_data.get("confidence", 0.5))
-
-                # INFO: Log parsed values
-                logger.info(f"Parsed decision: '{decision}', confidence: {confidence}")
-
-                # Map YES/NO to TP/FP
-                if decision == "YES":
-                    prediction = "TP"  # Smell detected
-                    logger.info(f"Sample {sample_id}: Successfully parsed YES -> TP")
-                elif decision == "NO":
-                    prediction = "FP"  # No smell detected
-                    logger.info(f"Sample {sample_id}: Successfully parsed NO -> FP")
-                else:
-                    logger.info(f"Sample {sample_id}: Invalid decision '{decision}' - falling back to FP")
-                    prediction = "FP"
-                    confidence = 0.5
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=False,
+                    temperature=0.1,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    num_return_sequences=1
+                )
+            
+            # Decode only the generated part
+            generated_text = self.tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            ).strip()
+            
+            if sample_id < 5:  # Log first few for debugging
+                logger.info(f"Sample {sample_id} generated: '{generated_text}'")
+            
+            # Parse the response
+            prediction, confidence = self._parse_response(generated_text, sample_id)
+            
+            return prediction, confidence
+            
+        except Exception as e:
+            logger.error(f"Error generating for sample {sample_id}: {e}")
+            return "FP", 0.5  # Default fallback
+    
+    def _parse_response(self, generated_text: str, sample_id: int) -> Tuple[str, float]:
+        """Parse model response to extract prediction and confidence."""
+        try:
+            # Try to find and parse JSON in the response
+            json_pattern = r'\{[^}]*\}'
+            json_matches = re.findall(json_pattern, generated_text)
+            
+            for json_str in json_matches:
+                try:
+                    # Clean up common JSON formatting issues
+                    cleaned_json = re.sub(r'([{,]\s*)(\w+):', r'\1"\2":', json_str)  # Quote keys
+                    cleaned_json = re.sub(r':\s*([^",}\s]+)([,}])', r': "\1"\2', cleaned_json)  # Quote values
+                    
+                    response_data = json.loads(cleaned_json)
+                    decision = response_data.get("decision", "").upper()
+                    confidence = float(response_data.get("confidence", 0.5))
+                    
+                    # Map decision to prediction label
+                    # During training: TP -> YES, FP -> NO
+                    # During evaluation: YES -> TP, NO -> FP
+                    if decision == "YES":
+                        return "TP", confidence
+                    elif decision == "NO":
+                        return "FP", confidence
+                    else:
+                        if sample_id < 5:
+                            logger.info(f"Sample {sample_id}: Invalid decision '{decision}', using fallback")
+                        return "FP", 0.5
+                        
+                except json.JSONDecodeError:
+                    continue
+            
+            # Fallback: look for keywords if JSON parsing fails
+            text_upper = generated_text.upper()
+            if 'YES' in text_upper or '"YES"' in text_upper:
+                return "TP", 0.8
+            elif 'NO' in text_upper or '"NO"' in text_upper:
+                return "FP", 0.8
             else:
-                # Fallback if no JSON found
-                logger.info(f"Sample {sample_id}: No JSON found in response - falling back to FP")
-                prediction = "FP"
-                confidence = 0.5
-
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            # If parsing fails, default to FP with low confidence
-            logger.info(f"Sample {sample_id}: JSON parsing failed ({type(e).__name__}) - falling back to FP")
-            prediction = "FP"
-            confidence = 0.5
-
-        # INFO: Log final prediction result
-        logger.info(f"Sample {sample_id}: Final prediction = {prediction}, confidence = {confidence}")
-
-        return prediction, confidence
+                if sample_id < 5:
+                    logger.info(f"Sample {sample_id}: No clear decision found, using fallback")
+                return "FP", 0.5
+                
+        except Exception as e:
+            if sample_id < 5:
+                logger.error(f"Sample {sample_id}: Error parsing response: {e}")
+            return "FP", 0.5
     
     def evaluate(
         self,
@@ -207,12 +237,10 @@ class GenerativeEvaluator:
         
         for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
             try:
-                # Use the prompted input
-                input_text = sample['with_prompt']
-                true_label = sample['label']
+                true_label = sample['label']  # Should be TP or FP
                 
                 # Make prediction
-                pred_label, confidence = self._predict_single(input_text, i)
+                pred_label, confidence = self._predict_single(sample, i)
                 
                 predictions.append(pred_label)
                 true_labels.append(true_label)
@@ -223,16 +251,22 @@ class GenerativeEvaluator:
                     'sample_id': i,
                     'smell': sample.get('smell', 'unknown'),
                     'file': sample.get('file', 'unknown'),
+                    'line': sample.get('line', 0),
                     'true_label': true_label,
                     'predicted_label': pred_label,
                     'confidence': confidence,
+                    'match': pred_label == true_label,
                     'content': sample.get('content', '')[:200] + '...',  # Truncate for readability
                 }
                 detailed_results.append(detailed_result)
                 
                 # Log progress periodically
                 if (i + 1) % 50 == 0:
-                    logger.info(f"Processed {i + 1}/{len(test_data)} samples")
+                    current_acc = accuracy_score(
+                        [1 if t == "TP" else 0 for t in true_labels[:i+1]],
+                        [1 if p == "TP" else 0 for p in predictions[:i+1]]
+                    )
+                    logger.info(f"Processed {i + 1}/{len(test_data)} samples - Current accuracy: {current_acc:.4f}")
                     
             except Exception as e:
                 logger.error(f"Error processing sample {i}: {e}")
@@ -244,9 +278,11 @@ class GenerativeEvaluator:
                     'sample_id': i,
                     'smell': sample.get('smell', 'unknown'),
                     'file': sample.get('file', 'unknown'),
+                    'line': sample.get('line', 0),
                     'true_label': sample['label'],
                     'predicted_label': "FP",
                     'confidence': 0.0,
+                    'match': False,
                     'error': str(e),
                     'content': sample.get('content', '')[:200] + '...',
                 })
@@ -262,16 +298,12 @@ class GenerativeEvaluator:
         precision, recall, f1, support = precision_recall_fscore_support(
             y_true, y_pred, average='binary', zero_division=0
         )
-
-        # Handle case where any metric might be None
-        if precision is None:
-            precision = 0.0
-        if recall is None:
-            recall = 0.0
-        if f1 is None:
-            f1 = 0.0
-        if support is None:
-            support = 0
+        
+        # Handle None values
+        precision = precision if precision is not None else 0.0
+        recall = recall if recall is not None else 0.0
+        f1 = f1 if f1 is not None else 0.0
+        support = support if support is not None else 0
         
         # Confusion matrix
         cm = confusion_matrix(y_true, y_pred)
@@ -285,6 +317,7 @@ class GenerativeEvaluator:
             'test_path': test_path,
             'num_samples': len(test_data),
             'evaluation_time': evaluation_time,
+            'samples_per_second': len(test_data) / evaluation_time,
             'metrics': {
                 'accuracy': float(accuracy),
                 'precision': float(precision),
@@ -299,12 +332,13 @@ class GenerativeEvaluator:
                 'tp': int(cm[1, 1]) if cm.shape == (2, 2) else 0,
             },
             'smell_metrics': smell_metrics,
-            'average_confidence': float(np.mean(confidences)),
+            'average_confidence': float(np.mean(confidences)) if confidences else 0.0,
             'predictions_summary': {
                 'total_tp_predicted': sum(1 for p in predictions if p == "TP"),
                 'total_fp_predicted': sum(1 for p in predictions if p == "FP"),
                 'total_tp_actual': sum(1 for t in true_labels if t == "TP"),
                 'total_fp_actual': sum(1 for t in true_labels if t == "FP"),
+                'correct_predictions': sum(1 for p, t in zip(predictions, true_labels) if p == t),
             }
         }
         
@@ -321,7 +355,8 @@ class GenerativeEvaluator:
             json.dump(results, f, indent=2)
         
         logger.info(f"Evaluation completed in {evaluation_time:.2f} seconds")
-        logger.info(f"Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
+        logger.info(f"Final Results: Acc={accuracy:.4f}, F1={f1:.4f}, P={precision:.4f}, R={recall:.4f}")
+        logger.info(f"Speed: {len(test_data) / evaluation_time:.2f} samples/second")
         
         return results
     
@@ -350,15 +385,12 @@ class GenerativeEvaluator:
                 precision, recall, f1, _ = precision_recall_fscore_support(
                     y_true, y_pred, average='binary', zero_division=0
                 )
-
-                # Handle None values in per-smell metrics
-                if precision is None:
-                    precision = 0.0
-                if recall is None:
-                    recall = 0.0
-                if f1 is None:
-                    f1 = 0.0
-
+                
+                # Handle None values
+                precision = precision if precision is not None else 0.0
+                recall = recall if recall is not None else 0.0
+                f1 = f1 if f1 is not None else 0.0
+                
                 smell_metrics[smell] = {
                     'count': len(y_true),
                     'accuracy': float(accuracy),
@@ -367,6 +399,32 @@ class GenerativeEvaluator:
                     'f1': float(f1),
                     'tp_actual': sum(y_true),
                     'fp_actual': len(y_true) - sum(y_true),
+                    'tp_predicted': sum(y_pred),
+                    'fp_predicted': len(y_pred) - sum(y_pred),
                 }
         
         return smell_metrics
+
+def main():
+    """Example usage of the evaluator."""
+    evaluator = GenerativeEvaluator(
+        model_path="models/generative_latest",
+        output_dir="results/evaluation",
+        use_4bit=True,
+        max_new_tokens=50
+    )
+    
+    results = evaluator.evaluate(
+        test_path="data/processed/chef_test.jsonl",
+        max_samples=None,  # Evaluate all samples
+        save_predictions=True
+    )
+    
+    print(f"Evaluation Results:")
+    print(f"Accuracy: {results['metrics']['accuracy']:.4f}")
+    print(f"F1 Score: {results['metrics']['f1']:.4f}")
+    print(f"Precision: {results['metrics']['precision']:.4f}")
+    print(f"Recall: {results['metrics']['recall']:.4f}")
+
+if __name__ == "__main__":
+    main()
