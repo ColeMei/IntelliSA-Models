@@ -113,9 +113,7 @@ class ChefDetectionDataset(Dataset):
         return {
             'input_ids': full_encoding['input_ids'].squeeze(),
             'attention_mask': full_encoding['attention_mask'].squeeze(), 
-            'labels': labels.squeeze(),
-            # Keep numeric label for evaluation
-            'label_id': 1 if sample['original_label'] == 'TP' else 0
+            'labels': labels.squeeze()
         }
 
 class GenerativeTrainer:
@@ -333,7 +331,8 @@ class GenerativeTrainer:
                 
                 # Parse the JSON response
                 pred_label = self._extract_decision_from_response(generated)
-                true_label = item['label_id']
+                # Get true label from original data
+                true_label = 1 if self.val_dataset.data[i]['original_label'] == 'TP' else 0
                 
                 predictions.append(pred_label)
                 true_labels.append(true_label)
@@ -345,7 +344,7 @@ class GenerativeTrainer:
             except Exception as e:
                 logger.warning(f"Error processing sample {i}: {e}")
                 predictions.append(0)  # Default to negative prediction
-                true_labels.append(item['label_id'])
+                true_labels.append(1 if self.val_dataset.data[i]['original_label'] == 'TP' else 0)
         
         # Calculate metrics
         if predictions and true_labels:
