@@ -116,10 +116,21 @@ class EncoderTrainer:
         num_epochs: int = 3,
         warmup_steps: int = 50,
         save_steps: int = 50,
-        eval_steps: int = 25
+        eval_steps: int = 25,
+        weight_decay: float = 0.01,
+        gradient_accumulation_steps: int = 1,
+        gradient_checkpointing: bool = False,
+        early_stopping_patience: int = None,
+        early_stopping_min_delta: float = 0.001,
+        fp16: bool = True,
+        dataloader_pin_memory: bool = True
     ):
-        """Train the model."""
-        
+        """Train the model with optimized hyperparameters."""
+
+        # Configure gradient checkpointing if enabled
+        if gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+
         training_args = TrainingArguments(
             output_dir=self.output_dir,
             per_device_train_batch_size=batch_size,
@@ -129,16 +140,29 @@ class EncoderTrainer:
             warmup_steps=warmup_steps,
             save_steps=save_steps,
             eval_steps=eval_steps,
+            weight_decay=weight_decay,
+            gradient_accumulation_steps=gradient_accumulation_steps,
             eval_strategy="steps",
             save_strategy="steps",
             logging_steps=10,
             load_best_model_at_end=True,
             metric_for_best_model="f1",
             greater_is_better=True,
-            dataloader_pin_memory=False,
+            dataloader_pin_memory=dataloader_pin_memory,
+            fp16=fp16,
             # Fix for datasets compatibility
             remove_unused_columns=False,
         )
+
+        # Add early stopping callback if configured
+        callbacks = []
+        if early_stopping_patience is not None:
+            from transformers import EarlyStoppingCallback
+            early_stopping = EarlyStoppingCallback(
+                early_stopping_patience=early_stopping_patience,
+                early_stopping_threshold=early_stopping_min_delta
+            )
+            callbacks.append(early_stopping)
         
         trainer = Trainer(
             model=self.model,
@@ -147,6 +171,7 @@ class EncoderTrainer:
             eval_dataset=self.val_dataset,
             data_collator=DataCollatorWithPadding(tokenizer=self.tokenizer),
             compute_metrics=compute_metrics,
+            callbacks=callbacks if callbacks else None,
         )
         
         logger.info("Starting training...")

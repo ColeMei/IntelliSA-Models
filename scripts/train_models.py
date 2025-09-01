@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import json
 
 try:
@@ -54,28 +54,53 @@ def train_generative(args):
     
     logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
 
-def train_encoder(args):
+def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
     """Train encoder model (CodeBERT/CodeT5)."""
     logger.info("Training encoder model")
-    
+
     trainer = EncoderTrainer(
         model_name=args.model_name,
         output_dir=args.output_dir
     )
-    
+
     # Prepare datasets
     trainer.prepare_datasets(args.train_path, args.val_path)
-    
-    # Train the model
+
+    # Extract additional parameters from config if available
+    weight_decay = 0.01
+    gradient_accumulation_steps = 1
+    gradient_checkpointing = False
+    early_stopping_patience = None
+    early_stopping_min_delta = 0.001
+    fp16 = True
+    dataloader_pin_memory = True
+
+    if config_data:
+        weight_decay = config_data.get('weight_decay', weight_decay)
+        gradient_accumulation_steps = config_data.get('gradient_accumulation_steps', gradient_accumulation_steps)
+        gradient_checkpointing = config_data.get('gradient_checkpointing', gradient_checkpointing)
+        early_stopping_patience = config_data.get('early_stopping_patience', early_stopping_patience)
+        early_stopping_min_delta = config_data.get('early_stopping_min_delta', early_stopping_min_delta)
+        fp16 = config_data.get('fp16', fp16)
+        dataloader_pin_memory = config_data.get('dataloader_pin_memory', dataloader_pin_memory)
+
+    # Train the model with optimized parameters
     trainer.train(
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         num_epochs=args.num_epochs,
         warmup_steps=args.warmup_steps,
         save_steps=args.save_steps,
-        eval_steps=args.eval_steps
+        eval_steps=args.eval_steps,
+        weight_decay=weight_decay,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        gradient_checkpointing=gradient_checkpointing,
+        early_stopping_patience=early_stopping_patience,
+        early_stopping_min_delta=early_stopping_min_delta,
+        fp16=fp16,
+        dataloader_pin_memory=dataloader_pin_memory
     )
-    
+
     logger.info(f" Encoder model training completed. Model saved to {args.output_dir}")
 
 def main():
@@ -299,7 +324,7 @@ def main():
         )
         logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
     else:
-        train_encoder(args)
+        train_encoder(args, config_data)
 
 if __name__ == "__main__":
     main()

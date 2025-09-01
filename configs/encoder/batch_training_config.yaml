@@ -1,85 +1,96 @@
-# Batch training configuration for encoder models hyperparameter sweep
-# This config defines all encoder experiments to run
+# Simplified batch training configuration for encoder models hyperparameter sweep
+# Optimized for HPC with uniform resource allocation
 
 # Global settings applied to all experiments
 global:
-  max_length: 256
-  warmup_steps: 100
-  eval_steps: 50
-  save_steps: 100
+  max_length: 512
+  warmup_ratio: 0.1
+  eval_steps: 100
+  save_steps: 200
   evaluation_strategy: "steps"
   save_strategy: "steps"
-  logging_steps: 10
+  logging_steps: 25
   load_best_model_at_end: true
   metric_for_best_model: "f1"
   greater_is_better: true
   train_path: "data/processed/chef_train.jsonl"
   val_path: "data/processed/chef_val.jsonl"
+  fp16: true
+  dataloader_pin_memory: true
 
-# Encoder experiments
+# Encoder experiments with unified hyperparameter ranges
 experiments:
   codebert_base:
     model_name: "microsoft/codebert-base"
     hyperparameters:
-      learning_rates: [1e-5, 2e-5, 3e-5, 5e-5, 1e-4]
-      batch_sizes: [4, 8, 12, 16]
-      num_epochs: [3, 4, 5, 6]
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [8, 16, 32]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
 
   codet5_small:
     model_name: "Salesforce/codet5-small"
     hyperparameters:
       learning_rates: [1e-5, 2e-5, 5e-5]
-      batch_sizes: [4, 8, 16]
-      num_epochs: [3, 5]
+      batch_sizes: [8, 16, 32]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
 
   codet5_base:
     model_name: "Salesforce/codet5-base"
     hyperparameters:
       learning_rates: [1e-5, 2e-5, 5e-5]
-      batch_sizes: [4, 8]
-      num_epochs: [3, 5]
+      batch_sizes: [4, 8, 16]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
+      gradient_accumulation_steps: [1, 2]
 
   codet5_large:
     model_name: "Salesforce/codet5-large"
     hyperparameters:
-      learning_rates: [1e-5, 2e-5]
-      batch_sizes: [2, 4]
-      num_epochs: [3]
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [2, 4, 8]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
+      gradient_accumulation_steps: [2, 4]
+    gradient_checkpointing: true
 
   codet5p_220m:
     model_name: "Salesforce/codet5p-220m"
     hyperparameters:
       learning_rates: [1e-5, 2e-5, 5e-5]
-      batch_sizes: [8, 16]
-      num_epochs: [3, 5]
+      batch_sizes: [4, 8, 16]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
+      gradient_accumulation_steps: [1, 2]
 
   codet5p_770m:
     model_name: "Salesforce/codet5p-770m"
     hyperparameters:
-      learning_rates: [1e-5, 2e-5]
-      batch_sizes: [4, 8]
-      num_epochs: [3]
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [2, 4, 8]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
+      gradient_accumulation_steps: [2, 4]
+    gradient_checkpointing: true
 
   codet5p_2b:
     model_name: "Salesforce/codet5p-2b"
     hyperparameters:
-      learning_rates: [1e-5]
-      batch_sizes: [2, 4]
-      num_epochs: [3]
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [1, 2, 4]
+      num_epochs: [3, 5, 7]
+      weight_decay: [0.01, 0.1]
+      gradient_accumulation_steps: [4, 8]
+    gradient_checkpointing: true
+
+# Early stopping to save compute time
+early_stopping:
+  patience: 3
+  min_delta: 0.001
 
 # Output configuration
 output:
   base_dir: "models/experiments/encoder"
   results_dir: "results/experiments/encoder"
-  configs_dir: "configs/experiments/encoder"
-  naming_pattern: "{model}_{hyperparams}_{timestamp}_job{id}"
-
-# SLURM configuration
-slurm:
-  partition: "gpu-a100"
-  qos: "normal"
-  gres: "gpu:1"
-  cpus_per_task: 4
-  mem: "32G"
-  time: "0-4:00:00"
-  tmp: "30GB"
+  naming_pattern: "{model}_{lr}_{bs}_{epochs}_{acc_steps}_{wd}"
