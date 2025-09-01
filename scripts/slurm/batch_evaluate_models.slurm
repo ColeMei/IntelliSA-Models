@@ -91,7 +91,7 @@ echo "✅ Encoder evaluation completed successfully!"
 
 # Create timestamped directories for permanent storage
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-PERMANENT_RESULTS_DIR="${PROJECT_ROOT}/results/evaluation_${TIMESTAMP}_job${SLURM_JOB_ID}"
+PERMANENT_RESULTS_DIR="${PROJECT_ROOT}/results/experiments/evaluation/evaluation_${TIMESTAMP}_job${SLURM_JOB_ID}"
 EVALUATION_LOGS_DIR="${PROJECT_ROOT}/logs/evaluation/"
 
 echo "💾 Copying evaluation results to permanent storage..."
@@ -109,12 +109,12 @@ cp ${TEMP_LOGS}/* ${PERMANENT_RESULTS_DIR}/ 2>/dev/null || true
 cp ${TEMP_LOGS}/* ${EVALUATION_LOGS_DIR}/ 2>/dev/null || true
 
 # Create symlink to latest evaluation results
-cd ${PROJECT_ROOT}/results/
+cd ${PROJECT_ROOT}/results/experiments/evaluation/
 rm -f evaluation_latest 2>/dev/null || true
 ln -s $(basename ${PERMANENT_RESULTS_DIR}) evaluation_latest
 
 echo "✅ Results copied successfully!"
-echo "  Latest results: ${PROJECT_ROOT}/results/evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
+echo "  Latest results: ${PROJECT_ROOT}/results/experiments/evaluation/evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
 
 # Display storage usage summary
 echo "📊 Storage usage summary:"
