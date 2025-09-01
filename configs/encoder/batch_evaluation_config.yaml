@@ -1,0 +1,16 @@
+# Batch Evaluation Configuration for Encoder Models
+# Simplified config for batch evaluation settings
+
+# SLURM resource allocation for evaluation jobs
+slurm:
+  partition: "gpu-a100"
+  qos: "normal"
+  gres: "gpu:1"
+  cpus_per_task: 8
+  mem: "32G"
+  time: "0-2:00:00"
+  tmp: "10GB"
+
+# Batch processing settings
+batch_evaluation:
+  job_spacing_seconds: 2 # Brief pause between job submissions

@@ -17,11 +17,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BatchEvaluator:
-    def __init__(self, models_dir: str = "models/experiments/encoder"):
+    def __init__(self, models_dir: str = "models/experiments/encoder",
+                 batch_config_path: str = "configs/encoder/batch_evaluation_config.yaml"):
         """Initialize batch evaluator."""
         self.models_dir = Path(models_dir)
         self.project_root = Path(__file__).parent.parent
-        
+        self.batch_config_path = Path(batch_config_path)
+        self.batch_config = self._load_batch_config()
+
+    def _load_batch_config(self) -> Dict[str, Any]:
+        """Load batch evaluation configuration."""
+        if self.batch_config_path.exists():
+            with open(self.batch_config_path, 'r') as f:
+                return yaml.safe_load(f)
+        else:
+            logger.warning(f"Batch config {self.batch_config_path} not found, using defaults")
+            return {}
+
     def find_trained_models(self) -> List[Dict[str, Any]]:
         """Find all trained model directories."""
         if not self.models_dir.exists():
@@ -72,16 +84,16 @@ class BatchEvaluator:
         with open(base_config_path, 'r') as f:
             config = yaml.safe_load(f)
 
-        # Update encoder model path and batch size based on model
+        # Update encoder model path
         if 'encoder' in config.get('models', {}):
             config['models']['encoder']['path'] = model_info['path']
 
-            # Adjust batch size based on model size (conservative approach)
+            # Use standard batch size logic (simplified)
             model_name = model_info['model_name'].lower()
             if 'large' in model_name or '2b' in model_name:
-                config['models']['encoder']['batch_size'] = 4  # Smaller batch for large models
+                config['models']['encoder']['batch_size'] = 4
             else:
-                config['models']['encoder']['batch_size'] = 8  # Standard batch size
+                config['models']['encoder']['batch_size'] = 8
 
         # Update output directory
         config['output_dir'] = str(eval_dir)
@@ -92,6 +104,25 @@ class BatchEvaluator:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
         return custom_config_path
+
+    def _get_slurm_settings(self) -> Dict[str, str]:
+        """Get SLURM settings from batch config."""
+        # Start with default SLURM settings
+        default_slurm = {
+            'partition': 'gpu-a100',
+            'qos': 'normal',
+            'gres': 'gpu:1',
+            'cpus_per_task': '8',
+            'mem': '32G',
+            'time': '0-2:00:00',
+            'tmp': '10GB'
+        }
+
+        # Override with batch config SLURM settings if available
+        if 'slurm' in self.batch_config:
+            default_slurm.update(self.batch_config['slurm'])
+
+        return default_slurm
 
     def submit_evaluation_job(self, model_info: Dict[str, Any], output_dir: Path, job_index: int) -> str:
         """Submit evaluation job to SLURM."""
@@ -104,17 +135,20 @@ class BatchEvaluator:
         # Create custom evaluation config for this specific model
         custom_config = self._create_custom_evaluation_config(model_info, eval_dir)
 
+        # Get SLURM settings from batch config
+        slurm_settings = self._get_slurm_settings()
+
         # Submit SLURM job using the existing evaluation script
         cmd = [
             "sbatch",
             f"--job-name=batch_eval_{model_info['name']}_{job_index}",
-            "--partition=gpu-a100",
-            "--qos=normal",
-            "--gres=gpu:1",
-            "--cpus-per-task=8",
-            "--mem=32G",
-            "--time=0-4:00:00",
-            "--tmp=20GB",
+            f"--partition={slurm_settings['partition']}",
+            f"--qos={slurm_settings['qos']}",
+            f"--gres={slurm_settings['gres']}",
+            f"--cpus-per-task={slurm_settings['cpus_per_task']}",
+            f"--mem={slurm_settings['mem']}",
+            f"--time={slurm_settings['time']}",
+            f"--tmp={slurm_settings['tmp']}",
             f"--output={self.project_root}/logs/slurm_outputs/batch_eval_{model_info['name']}_{job_index}_%j.out",
             f"--error={self.project_root}/logs/slurm_outputs/batch_eval_{model_info['name']}_{job_index}_%j.err",
             "--mail-type=BEGIN,END,FAIL",
@@ -157,35 +191,45 @@ class BatchEvaluator:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
-        # Submit evaluation jobs
+        # Submit evaluation jobs with spacing
         job_ids = []
+        job_spacing = self.batch_config.get('batch_evaluation', {}).get('job_spacing_seconds', 1)
+
         for i, model_info in enumerate(models):
             logger.info(f"Submitting evaluation job {i+1}/{len(models)}: {model_info['name']}")
-            
+
             job_id = self.submit_evaluation_job(model_info, output_path, i)
             if job_id:
                 job_ids.append(job_id)
-        
+
+            # Add spacing between job submissions to avoid SLURM overload
+            if i < len(models) - 1 and job_spacing > 0:
+                import time
+                logger.info(f"Waiting {job_spacing}s before next job submission...")
+                time.sleep(job_spacing)
+
         logger.info(f"Batch evaluation submitted: {len(job_ids)}/{len(models)} jobs")
         return job_ids
 
 def main():
     parser = argparse.ArgumentParser(description="Batch evaluation of trained models using SLURM")
-    parser.add_argument("--models-dir", default="models/experiments/encoder", 
+    parser.add_argument("--models-dir", default="models/experiments/encoder",
                        help="Directory containing trained models")
-    parser.add_argument("--output-dir", default="results/experiments/encoder", 
+    parser.add_argument("--output-dir", default="results/experiments/encoder",
                        help="Output directory for evaluation results")
-    parser.add_argument("--max-models", type=int, 
+    parser.add_argument("--batch-config", default="configs/encoder/batch_evaluation_config.yaml",
+                       help="Batch evaluation configuration file")
+    parser.add_argument("--max-models", type=int,
                        help="Maximum number of models to evaluate")
-    parser.add_argument("--filter", type=str, 
+    parser.add_argument("--filter", type=str,
                        help="Filter models by pattern (e.g., 'codebert')")
-    parser.add_argument("--dry-run", action="store_true", 
+    parser.add_argument("--dry-run", action="store_true",
                        help="Show models to evaluate without running")
-    
+
     args = parser.parse_args()
-    
+
     # Initialize evaluator
-    evaluator = BatchEvaluator(args.models_dir)
+    evaluator = BatchEvaluator(args.models_dir, args.batch_config)
     
     # Find models
     models = evaluator.find_trained_models()
