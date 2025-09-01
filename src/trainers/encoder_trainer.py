@@ -12,9 +12,74 @@ from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import logging
 from typing import Dict, List, Optional
 import numpy as np
+import time
+import random
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def load_model_with_retry(model_name: str, num_labels: int = 2, max_retries: int = 5, base_delay: float = 10.0):
+    """
+    Load model and tokenizer with retry logic for rate limiting.
+    
+    Args:
+        model_name: HuggingFace model name
+        num_labels: Number of classification labels
+        max_retries: Maximum retry attempts
+        base_delay: Base delay in seconds (exponential backoff)
+    
+    Returns:
+        tuple: (tokenizer, model)
+    """
+    trust_remote_code = 'codet5p' in model_name.lower()
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Loading {model_name} (attempt {attempt + 1}/{max_retries})")
+            
+            # Load tokenizer with retry
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                trust_remote_code=trust_remote_code
+            )
+            
+            # Load model with retry
+            model = AutoModelForSequenceClassification.from_pretrained(
+                model_name,
+                num_labels=num_labels,
+                trust_remote_code=trust_remote_code
+            )
+            
+            logger.info(f"Successfully loaded {model_name}")
+            return tokenizer, model
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            is_rate_limit = any(term in error_str for term in ['429', 'rate limit', 'too many requests'])
+            is_dependency = any(term in error_str for term in ['protobuf', 'sentencepiece'])
+            
+            if is_dependency:
+                logger.error(f"Missing dependency for {model_name}: {e}")
+                logger.error("Please install: pip install protobuf sentencepiece")
+                raise
+            
+            if is_rate_limit and attempt < max_retries - 1:
+                # Exponential backoff with jitter
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 5)
+                logger.warning(f"Rate limited loading {model_name}. Retrying in {delay:.1f}s...")
+                time.sleep(delay)
+                continue
+            
+            if attempt == max_retries - 1:
+                logger.error(f"Failed to load {model_name} after {max_retries} attempts: {e}")
+                raise
+            
+            # For other errors, retry with shorter delay
+            delay = 5 + random.uniform(0, 3)
+            logger.warning(f"Error loading {model_name}: {e}. Retrying in {delay:.1f}s...")
+            time.sleep(delay)
+    
+    raise Exception(f"Failed to load {model_name} after {max_retries} attempts")
 
 class ChefDetectionDataset(Dataset):
     """Dataset for Chef detection classification using encoder approach."""
@@ -102,21 +167,8 @@ class EncoderTrainer:
         self.model_name = model_name
         self.output_dir = output_dir
         
-        # Initialize tokenizer and model
-        # CodeT5+ models require trust_remote_code=True
-        trust_remote_code = 'codet5p' in model_name.lower()
-        
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=trust_remote_code
-        )
-        
-        # Use the standard approach instead of custom class
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, 
-            num_labels=2,
-            trust_remote_code=trust_remote_code
-        )
+        # Initialize tokenizer and model with retry logic
+        self.tokenizer, self.model = load_model_with_retry(model_name, num_labels=2)
         
         # Add special tokens if needed
         if self.tokenizer.pad_token is None:
