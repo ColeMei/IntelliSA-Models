@@ -15,6 +15,7 @@ global:
   train_path: "data/processed/chef_train.jsonl"
   val_path: "data/processed/chef_val.jsonl"
   fp16: true
+  dataloader_pin_memory: true
 
 experiments:
   # Smaller models: fewer experiments since they're less critical
