@@ -65,8 +65,20 @@ class BatchTrainer:
 
         # Generate experiments for each base combination
         for base_combo in base_combinations:
-            # Create parameter dict
-            param_dict = dict(zip(base_params, base_combo))
+            # Create parameter dict with singular keys (convert plural config names to singular)
+            param_dict = {}
+            for param_name, param_value in zip(base_params, base_combo):
+                # Convert plural config names to singular for consistency
+                if param_name == 'learning_rates':
+                    param_dict['learning_rate'] = param_value
+                elif param_name == 'batch_sizes':
+                    param_dict['batch_size'] = param_value
+                elif param_name == 'num_epochs':
+                    param_dict['num_epochs'] = param_value
+                elif param_name == 'weight_decay':
+                    param_dict['weight_decay'] = param_value
+                else:
+                    param_dict[param_name] = param_value
 
             # Handle optional parameters
             if optional_params:
@@ -235,7 +247,22 @@ class BatchTrainer:
         if dry_run:
             logger.info("Dry run - showing experiments:")
             for i, exp in enumerate(experiments):
-                exp_name = f"{exp['name']}_lr{exp['learning_rate']}_bs{exp['batch_size']}_ep{exp['num_epochs']}"
+                exp_name_parts = [
+                    exp['name'],
+                    f"lr{exp['learning_rate']}",
+                    f"bs{exp['batch_size']}",
+                    f"ep{exp['num_epochs']}"
+                ]
+
+                # Add weight_decay if it varies
+                if 'weight_decay' in exp:
+                    exp_name_parts.append(f"wd{exp['weight_decay']}")
+
+                # Add gradient_accumulation_steps if it varies
+                if 'gradient_accumulation_steps' in exp:
+                    exp_name_parts.append(f"acc{exp['gradient_accumulation_steps']}")
+
+                exp_name = "_".join(exp_name_parts)
                 logger.info(f"  {i+1}. {exp_name}")
             return []
         
@@ -249,9 +276,24 @@ class BatchTrainer:
         # Submit jobs
         job_ids = []
         for i, experiment in enumerate(experiments):
-            exp_name = f"{experiment['name']}_lr{experiment['learning_rate']}_bs{experiment['batch_size']}_ep{experiment['num_epochs']}"
+            exp_name_parts = [
+                experiment['name'],
+                f"lr{experiment['learning_rate']}",
+                f"bs{experiment['batch_size']}",
+                f"ep{experiment['num_epochs']}"
+            ]
 
-                        # Create config file in configs directory
+            # Add weight_decay if it varies
+            if 'weight_decay' in experiment:
+                exp_name_parts.append(f"wd{experiment['weight_decay']}")
+
+            # Add gradient_accumulation_steps if it varies
+            if 'gradient_accumulation_steps' in experiment:
+                exp_name_parts.append(f"acc{experiment['gradient_accumulation_steps']}")
+
+            exp_name = "_".join(exp_name_parts)
+
+            # Create config file in configs directory
             # The config's output_dir will be overridden by SLURM script with timestamped path
             config_path = self.create_experiment_config(experiment, configs_base)
 
