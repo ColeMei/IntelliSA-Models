@@ -39,12 +39,16 @@ class BatchEvaluator:
         if not self.models_dir.exists():
             logger.warning(f"Models directory {self.models_dir} does not exist")
             return []
-        
+
         trained_models = []
-        
+
         # Look for model directories
         for model_dir in self.models_dir.iterdir():
             if not model_dir.is_dir():
+                continue
+
+            # Skip symlinks to avoid duplicate evaluations
+            if model_dir.is_symlink():
                 continue
                 
             # Check if this is a trained model (has config and model files)
@@ -105,24 +109,7 @@ class BatchEvaluator:
 
         return custom_config_path
 
-    def _get_slurm_settings(self) -> Dict[str, str]:
-        """Get SLURM settings from batch config."""
-        # Start with default SLURM settings
-        default_slurm = {
-            'partition': 'gpu-a100',
-            'qos': 'normal',
-            'gres': 'gpu:1',
-            'cpus_per_task': '8',
-            'mem': '32G',
-            'time': '0-2:00:00',
-            'tmp': '10GB'
-        }
 
-        # Override with batch config SLURM settings if available
-        if 'slurm' in self.batch_config:
-            default_slurm.update(self.batch_config['slurm'])
-
-        return default_slurm
 
     def submit_evaluation_job(self, model_info: Dict[str, Any], output_dir: Path, job_index: int) -> str:
         """Submit evaluation job to SLURM."""
@@ -135,20 +122,17 @@ class BatchEvaluator:
         # Create custom evaluation config for this specific model
         custom_config = self._create_custom_evaluation_config(model_info, eval_dir)
 
-        # Get SLURM settings from batch config
-        slurm_settings = self._get_slurm_settings()
-
         # Submit SLURM job using the existing evaluation script
         cmd = [
             "sbatch",
             f"--job-name=batch_eval_{model_info['name']}_{job_index}",
-            f"--partition={slurm_settings['partition']}",
-            f"--qos={slurm_settings['qos']}",
-            f"--gres={slurm_settings['gres']}",
-            f"--cpus-per-task={slurm_settings['cpus_per_task']}",
-            f"--mem={slurm_settings['mem']}",
-            f"--time={slurm_settings['time']}",
-            f"--tmp={slurm_settings['tmp']}",
+            "--partition=gpu-a100",
+            "--qos=normal",
+            "--gres=gpu:1",
+            "--cpus-per-task=8",
+            "--mem=32G",
+            "--time=0-2:00:00",
+            "--tmp=10GB",
             f"--output={self.project_root}/logs/slurm_outputs/batch_eval_{model_info['name']}_{job_index}_%j.out",
             f"--error={self.project_root}/logs/slurm_outputs/batch_eval_{model_info['name']}_{job_index}_%j.err",
             "--mail-type=BEGIN,END,FAIL",
@@ -193,7 +177,7 @@ class BatchEvaluator:
         
         # Submit evaluation jobs with spacing
         job_ids = []
-        job_spacing = self.batch_config.get('batch_evaluation', {}).get('job_spacing_seconds', 1)
+        job_spacing = 1  # Default 1 second spacing between job submissions
 
         for i, model_info in enumerate(models):
             logger.info(f"Submitting evaluation job {i+1}/{len(models)}: {model_info['name']}")
@@ -219,6 +203,7 @@ def main():
                        help="Output directory for evaluation results")
     parser.add_argument("--batch-config", default="configs/encoder/batch_evaluation_config.yaml",
                        help="Batch evaluation configuration file")
+
     parser.add_argument("--max-models", type=int,
                        help="Maximum number of models to evaluate")
     parser.add_argument("--filter", type=str,
