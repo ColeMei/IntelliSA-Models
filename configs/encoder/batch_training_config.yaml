@@ -1,0 +1,100 @@
+# Batch training configuration for encoder models hyperparameter sweep
+# This config defines all encoder experiments to run
+
+# Global settings applied to all experiments
+global:
+  max_length: 256
+  warmup_steps: 100
+  eval_steps: 50
+  save_steps: 100
+  evaluation_strategy: "steps"
+  save_strategy: "steps"
+  logging_steps: 10
+  load_best_model_at_end: true
+  metric_for_best_model: "f1"
+  greater_is_better: true
+  train_path: "data/processed/chef_train.jsonl"
+  val_path: "data/processed/chef_val.jsonl"
+
+# Encoder experiments
+experiments:
+  codebert_base:
+    model_name: "microsoft/codebert-base"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [8, 16]
+      num_epochs: [3, 5]
+
+  # Additional CodeBERT experiments for comparison
+  codebert_base_extended:
+    model_name: "microsoft/codebert-base"
+    hyperparameters:
+      learning_rates: [3e-5, 1e-4]  # Higher learning rates
+      batch_sizes: [4, 12]          # Different batch sizes
+      num_epochs: [4, 6]            # More epochs
+
+  codebert_large:
+    model_name: "microsoft/codebert-base"  # Note: codebert-large doesn't exist, using base
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5]
+      batch_sizes: [4, 8]
+      num_epochs: [3]
+
+  codet5_small:
+    model_name: "Salesforce/codet5-small"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [4, 8, 16]
+      num_epochs: [3, 5]
+
+  codet5_base:
+    model_name: "Salesforce/codet5-base"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [4, 8]
+      num_epochs: [3, 5]
+
+  codet5_large:
+    model_name: "Salesforce/codet5-large"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5]
+      batch_sizes: [2, 4]
+      num_epochs: [3]
+
+  codet5p_220m:
+    model_name: "Salesforce/codet5p-220m"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5, 5e-5]
+      batch_sizes: [8, 16]
+      num_epochs: [3, 5]
+
+  codet5p_770m:
+    model_name: "Salesforce/codet5p-770m"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5]
+      batch_sizes: [4, 8]
+      num_epochs: [3]
+
+  codet5p_2b:
+    model_name: "Salesforce/codet5p-2b"
+    hyperparameters:
+      learning_rates: [1e-5]
+      batch_sizes: [2, 4]
+      num_epochs: [3]
+
+# Output configuration
+output:
+  base_dir: "models/experiments/encoder"
+  results_dir: "results/experiments/encoder"
+  configs_dir: "configs/experiments/encoder"
+  naming_pattern: "{model}_{hyperparams}_{timestamp}_job{id}"
+
+# SLURM configuration
+slurm:
+  partition: "gpu-a100"
+  qos: "normal"
+  gres: "gpu:1"
+  cpus_per_task: 4
+  mem: "32G"
+  time: "0-4:00:00"
+  tmp: "30GB"
