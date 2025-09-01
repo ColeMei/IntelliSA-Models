@@ -1,16 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=batch_encoder_training
-#SBATCH --partition=gpu-a100
-#SBATCH --qos=normal
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=0-4:00:00
-#SBATCH --tmp=30GB
-#SBATCH --output=/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/logs/slurm_outputs/%j_batch.out
-#SBATCH --error=/data/gpfs/projects/punim2518/LLM-IaC-SecEval-Models/logs/slurm_outputs/%j_batch.err
-#SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=qmmei@student.unimelb.edu.au
+# SLURM parameters are set by the Python script that submits this job
+# No need to specify them here as they will be overridden
 
 # Print job information
 echo "========================================="
