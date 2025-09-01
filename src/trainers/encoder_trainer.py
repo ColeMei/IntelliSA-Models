@@ -65,9 +65,23 @@ class ChefDetectionDataset(Dataset):
         }
 
 def compute_metrics(pred):
-    """Compute metrics for evaluation."""
+    """Compute metrics for evaluation.
+    
+    Handles different model output formats:
+    - CodeBERT/RoBERTa: Returns single logits tensor
+    - T5-based models: Returns tuple with logits as first element
+    """
     labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
+    
+    # Handle different prediction formats based on model architecture
+    if isinstance(pred.predictions, tuple):
+        # T5-based models return tuple (logits, ...)
+        logits = pred.predictions[0]
+    else:
+        # Simple models like CodeBERT return single tensor
+        logits = pred.predictions
+    
+    preds = logits.argmax(-1)
     precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
     acc = accuracy_score(labels, preds)
     return {
@@ -89,12 +103,19 @@ class EncoderTrainer:
         self.output_dir = output_dir
         
         # Initialize tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        # CodeT5+ models require trust_remote_code=True
+        trust_remote_code = 'codet5p' in model_name.lower()
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=trust_remote_code
+        )
         
         # Use the standard approach instead of custom class
         self.model = AutoModelForSequenceClassification.from_pretrained(
             model_name, 
-            num_labels=2
+            num_labels=2,
+            trust_remote_code=trust_remote_code
         )
         
         # Add special tokens if needed
