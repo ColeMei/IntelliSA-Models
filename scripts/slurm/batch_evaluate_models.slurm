@@ -25,19 +25,24 @@ python --version
 nvidia-smi
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
 
-# Get config file from command line argument
+# Get arguments: config file and destination directory
 CONFIG_FILE="$1"
+DEST_DIR="$2"
 if [[ -z "$CONFIG_FILE" ]]; then
-    echo "❌ No config file provided! Usage: sbatch batch_evaluate_models.slurm <config_file>"
+    echo "❌ No config file provided! Usage: sbatch batch_evaluate_models.slurm <config_file> <dest_dir>"
     exit 1
 fi
-
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "❌ Config file not found: $CONFIG_FILE"
     exit 1
 fi
+if [[ -z "$DEST_DIR" ]]; then
+    echo "❌ No destination directory provided! Usage: sbatch batch_evaluate_models.slurm <config_file> <dest_dir>"
+    exit 1
+fi
 
 echo "📋 Using config file: $CONFIG_FILE"
+echo "📁 Destination directory: $DEST_DIR"
 
 # Set up fast local storage structure
 echo "🗂️ Setting up fast local storage structure..."
@@ -90,9 +95,8 @@ fi
 
 echo "✅ Encoder evaluation completed successfully!"
 
-# Create timestamped directories for permanent storage
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-PERMANENT_RESULTS_DIR="${PROJECT_ROOT}/results/experiments/evaluation/evaluation_${TIMESTAMP}_job${SLURM_JOB_ID}"
+# Use provided destination directory for permanent storage
+PERMANENT_RESULTS_DIR="$DEST_DIR"
 EVALUATION_LOGS_DIR="${PROJECT_ROOT}/logs/evaluation/"
 
 echo "💾 Copying evaluation results to permanent storage..."
@@ -109,10 +113,7 @@ cp ${TEMP_LOGS}/* ${PERMANENT_RESULTS_DIR}/ 2>/dev/null || true
 # Copy logs to evaluation logs directory
 cp ${TEMP_LOGS}/* ${EVALUATION_LOGS_DIR}/ 2>/dev/null || true
 
-# Create symlink to latest batch evaluation results
-cd ${PROJECT_ROOT}/results/experiments/evaluation/
-rm -f batch_evaluation_latest 2>/dev/null || true
-ln -s $(basename ${PERMANENT_RESULTS_DIR}) batch_evaluation_latest
+# Skip creating the batch_evaluation_latest symlink per user preference
 
 echo "✅ Results copied successfully!"
 echo "  Latest results: ${PROJECT_ROOT}/results/experiments/evaluation/batch_evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
@@ -145,12 +146,7 @@ echo "Job Duration: $((SECONDS / 60)) minutes"
 echo "Results saved to: ${PERMANENT_RESULTS_DIR}"
 echo "========================================="
 
-# Clean up temporary config files
-TEMP_CONFIG_DIR="/tmp/batch_eval_configs"
-if [[ -d "$TEMP_CONFIG_DIR" ]]; then
-    echo "🧹 Cleaning up temporary config files..."
-    rm -rf "$TEMP_CONFIG_DIR" 2>/dev/null || true
-fi
+# Note: Evaluation config files are now stored under ${PROJECT_ROOT}/logs/batch_eval_configs for reproducibility
 
 # Note: Fast local storage cleanup is automatic
 echo "🧹 Fast local storage will be automatically cleaned when job completes"
