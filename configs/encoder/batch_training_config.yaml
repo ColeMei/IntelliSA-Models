@@ -62,13 +62,13 @@ experiments:
   codet5_large:
     model_name: "Salesforce/codet5-large"
     hyperparameters:
-      learning_rates: [1e-5, 2e-5, 5e-5]
+      learning_rates: [1e-5, 2e-5]
       batch_sizes: [4, 8]
       num_epochs: [3, 5]
       weight_decay: [0.01, 0.1]
       gradient_accumulation_steps: [2] # Fixed accumulation
     gradient_checkpointing: true
-    # 3 × 2 × 2 × 2 × 1 = 24 experiments
+    # 2 × 2 × 2 × 2 × 1 = 16 experiments
 
   codet5p_770m:
     model_name: "Salesforce/codet5p-770m"
@@ -78,17 +78,6 @@ experiments:
       num_epochs: [3, 5]
       weight_decay: [0.01, 0.1]
       gradient_accumulation_steps: [2]
-    gradient_checkpointing: true
-    # 2 × 2 × 2 × 2 × 1 = 16 experiments
-
-  codet5p_2b:
-    model_name: "Salesforce/codet5p-2b"
-    hyperparameters:
-      learning_rates: [1e-5, 2e-5]
-      batch_sizes: [2, 4]
-      num_epochs: [3, 5]
-      weight_decay: [0.01, 0.1]
-      gradient_accumulation_steps: [4] # Fixed accumulation
     gradient_checkpointing: true
     # 2 × 2 × 2 × 2 × 1 = 16 experiments
 
