@@ -100,16 +100,19 @@ echo "  Results destination: ${RESULT_DIR}"
 
 # Create directories
 mkdir -p ${PERMANENT_MODEL_DIR}
-mkdir -p ${RESULT_DIR}/model
+mkdir -p ${RESULT_DIR}
 mkdir -p ${PROJECT_ROOT}/logs/training/
 
 # Copy model to timestamped location (preserve all training runs)
 cp -r ${MODEL_CHECKPOINTS}/generative/* ${PERMANENT_MODEL_DIR}/
 
-# Copy to results directory structure
-cp -r ${MODEL_CHECKPOINTS}/generative ${RESULT_DIR}/model/
+# Copy only logs and config to results directory (no model duplication)
 cp ${TEMP_LOGS}/* ${RESULT_DIR}/ 2>/dev/null || true
 cp ${PROJECT_ROOT}/configs/generative_config.yaml ${RESULT_DIR}/config_used.yaml
+
+# Create symlink from results to model (saves space)
+cd ${RESULT_DIR}
+ln -s ${PERMANENT_MODEL_DIR} model
 
 # Copy logs to training logs directory
 cp ${TEMP_LOGS}/* ${PROJECT_ROOT}/logs/training/ 2>/dev/null || true

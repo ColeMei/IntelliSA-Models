@@ -28,7 +28,7 @@ class ModelCleanup:
         # Scan models directory
         if self.models_dir.exists():
             for item in self.models_dir.iterdir():
-                if item.is_dir() and not item.name.endswith('_latest'):
+                if item.is_dir() and not item.name.endswith('_latest') and not item.name.endswith('_job'):
                     base_name = item.name
                     size = self._get_dir_size(item)
                     model_info[base_name] = {
