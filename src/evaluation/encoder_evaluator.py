@@ -143,10 +143,17 @@ class EncoderEvaluator:
         evaluation_time = time.time() - start_time
         
         # Process predictions
-        logits = predictions.predictions
+        # Handle different model output formats (same as training fix)
+        if isinstance(predictions.predictions, tuple):
+            # T5-based models return tuple (logits, ...)
+            logits = predictions.predictions[0]
+        else:
+            # Simple models like CodeBERT return single tensor
+            logits = predictions.predictions
+
         y_pred = np.argmax(logits, axis=1)
         y_true = predictions.label_ids
-        
+
         # Get prediction probabilities
         probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
         confidences = np.max(probs, axis=1)

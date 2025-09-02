@@ -153,7 +153,7 @@ class BatchEvaluator:
             logger.error(f"❌ Failed to submit evaluation for {model_info['name']}: {result.stderr}")
             return None
     
-    def run_batch_evaluation(self, output_dir: str = "results/experiments/encoder", 
+    def run_batch_evaluation(self, output_dir: str = "results/experiments/evaluation",
                            max_models: int = None, filter_pattern: str = None) -> List[str]:
         """Run batch evaluation of all models using SLURM."""
         models = self.find_trained_models()
@@ -199,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser(description="Batch evaluation of trained models using SLURM")
     parser.add_argument("--models-dir", default="models/experiments/encoder",
                        help="Directory containing trained models")
-    parser.add_argument("--output-dir", default="results/experiments/encoder",
+    parser.add_argument("--output-dir", default="results/experiments/evaluation",
                        help="Output directory for evaluation results")
     parser.add_argument("--batch-config", default="configs/encoder/batch_evaluation_config.yaml",
                        help="Batch evaluation configuration file")

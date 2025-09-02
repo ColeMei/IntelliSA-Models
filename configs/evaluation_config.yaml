@@ -9,7 +9,7 @@ evaluation:
 
   # Data configuration
   test_path: "data/processed/chef_test.jsonl"
-  output_dir: "results/evaluation"
+  output_dir: "results/experiments/evaluation"
 
   # Metrics to compute
   metrics:
