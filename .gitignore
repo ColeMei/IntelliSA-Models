@@ -15,7 +15,11 @@ models/
 
 # Training logs - generated during training
 logs/
+logview/
+local/
 !logs/.gitkeep
+!logview/.gitkeep
+!local/.gitkeep
 
 # Experimental results - backup separately  
 results/
