@@ -235,13 +235,19 @@ class BatchTrainer:
         """Run batch training."""
         experiments = self.generate_experiments()
         
-        # Apply filters
+        # Apply filters (support comma-separated patterns)
         if filter_pattern:
-            experiments = [exp for exp in experiments if filter_pattern in exp['name']]
+            # Split on comma and strip whitespace
+            filter_patterns = [p.strip() for p in filter_pattern.split(',')]
+            experiments = [exp for exp in experiments
+                          if any(pattern in exp['name'] for pattern in filter_patterns)]
 
-        # Apply exclusions
+        # Apply exclusions (support comma-separated patterns)
         if exclude_pattern:
-            experiments = [exp for exp in experiments if exclude_pattern not in exp['name']]
+            # Split on comma and strip whitespace
+            exclude_patterns = [p.strip() for p in exclude_pattern.split(',')]
+            experiments = [exp for exp in experiments
+                          if not any(pattern in exp['name'] for pattern in exclude_patterns)]
 
         if max_experiments:
             experiments = experiments[:max_experiments]
@@ -317,9 +323,9 @@ def main():
     parser.add_argument("--max-experiments", type=int, 
                        help="Limit number of experiments")
     parser.add_argument("--filter", type=str,
-                       help="Filter experiments by pattern (e.g., 'codebert', 'codet5_base', 'small')")
+                       help="Filter experiments by pattern(s) - comma-separated (e.g., 'codebert,codet5_base')")
     parser.add_argument("--exclude", type=str,
-                       help="Exclude experiments matching pattern (e.g., 'codet5_large', 'codet5p_2b')")
+                       help="Exclude experiments matching pattern(s) - comma-separated (e.g., 'codet5_large,codet5p_2b')")
     
     args = parser.parse_args()
     
