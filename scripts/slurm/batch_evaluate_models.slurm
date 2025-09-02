@@ -82,7 +82,7 @@ srun --unbuffered python scripts/evaluate_models.py \
     --approach encoder \
     --config ${CONFIG_FILE} \
     --test-path ${DATA_CACHE}/chef_test.jsonl \
-    --output-dir ${RESULTS_CACHE} 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
+    --output-dir ${RESULTS_CACHE}/encoder_eval 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
 
 EVAL_EXIT_CODE=$?
 if [ $EVAL_EXIT_CODE -ne 0 ]; then
@@ -106,8 +106,12 @@ echo "  Results destination: ${PERMANENT_RESULTS_DIR}"
 mkdir -p ${PERMANENT_RESULTS_DIR}
 mkdir -p ${EVALUATION_LOGS_DIR}
 
-# Copy all results to permanent storage
+# Copy all results to permanent storage (keeps encoder_eval/ subdir)
 cp -r ${RESULTS_CACHE}/* ${PERMANENT_RESULTS_DIR}/
+
+# Copy the exact config used into encoder_eval/ for provenance
+mkdir -p ${PERMANENT_RESULTS_DIR}/encoder_eval
+cp ${CONFIG_FILE} ${PERMANENT_RESULTS_DIR}/encoder_eval/eval_config.yaml 2>/dev/null || true
 cp ${TEMP_LOGS}/* ${PERMANENT_RESULTS_DIR}/ 2>/dev/null || true
 
 # Copy logs to evaluation logs directory
