@@ -230,15 +230,19 @@ class BatchTrainer:
             logger.error(f"❌ Failed to submit {exp_name}: {result.stderr}")
             return None
     
-    def run(self, dry_run: bool = False, max_experiments: int = None, 
-            filter_pattern: str = None) -> List[str]:
+    def run(self, dry_run: bool = False, max_experiments: int = None,
+            filter_pattern: str = None, exclude_pattern: str = None) -> List[str]:
         """Run batch training."""
         experiments = self.generate_experiments()
         
         # Apply filters
         if filter_pattern:
             experiments = [exp for exp in experiments if filter_pattern in exp['name']]
-        
+
+        # Apply exclusions
+        if exclude_pattern:
+            experiments = [exp for exp in experiments if exclude_pattern not in exp['name']]
+
         if max_experiments:
             experiments = experiments[:max_experiments]
         
@@ -312,8 +316,10 @@ def main():
                        help="Show experiments without running")
     parser.add_argument("--max-experiments", type=int, 
                        help="Limit number of experiments")
-    parser.add_argument("--filter", type=str, 
-                       help="Filter experiments by pattern (e.g., 'codebert')")
+    parser.add_argument("--filter", type=str,
+                       help="Filter experiments by pattern (e.g., 'codebert', 'codet5_base', 'small')")
+    parser.add_argument("--exclude", type=str,
+                       help="Exclude experiments matching pattern (e.g., 'codet5_large', 'codet5p_2b')")
     
     args = parser.parse_args()
     
@@ -324,7 +330,8 @@ def main():
     job_ids = trainer.run(
         dry_run=args.dry_run,
         max_experiments=args.max_experiments,
-        filter_pattern=args.filter
+        filter_pattern=args.filter,
+        exclude_pattern=args.exclude
     )
     
     if job_ids:
