@@ -97,13 +97,13 @@ class ModelCleanup:
         total_size = total_model_size + total_results_size
 
         logger.info(f"📊 Total models: {len(model_info)}")
-        logger.info(".2f")
-        logger.info(".2f")
-        logger.info(".2f")
+        logger.info(f"💾 Models disk usage: {total_model_size:.2f} GB")
+        logger.info(f"📊 Results disk usage: {total_results_size:.2f} GB")
+        logger.info(f"📈 Total disk usage: {total_size:.2f} GB")
 
         logger.info("📁 Largest models (by total size):")
         for name, info in sorted_models[:10]:
-            logger.info(".2f")
+            logger.info(f"  • {name}: {info['total_size']:.2f} GB")
 
         # Show directory breakdown
         if self.models_dir.exists():
@@ -124,12 +124,12 @@ class ModelCleanup:
                 if dry_run:
                     logger.info(f"Would remove: {name}")
                     if info['model_path']:
-                        logger.info(".2f")
+                        logger.info(f"  - Model: {info['model_size']:.2f} GB")
                     if info['results_path']:
-                        logger.info(".2f")
+                        logger.info(f"  - Results: {info['results_size']:.2f} GB")
                     if info['symlink_path']:
                         logger.info(f"  - Symlink: {info['symlink_path'].name}")
-                    logger.info(".2f")
+                    logger.info(f"  - Total: {info['total_size']:.2f} GB")
                 else:
                     # Remove model directory
                     if info['model_path']:
@@ -176,12 +176,12 @@ class ModelCleanup:
             if dry_run:
                 logger.info(f"Would remove: {name}")
                 if info['model_path']:
-                    logger.info(".2f")
+                    logger.info(f"  - Model: {info['model_size']:.2f} GB")
                 if info['results_path']:
-                    logger.info(".2f")
+                    logger.info(f"  - Results: {info['results_size']:.2f} GB")
                 if info['symlink_path']:
                     logger.info(f"  - Symlink: {info['symlink_path'].name}")
-                logger.info(".2f")
+                logger.info(f"  - Total: {info['total_size']:.2f} GB")
             else:
                 # Remove model directory
                 if info['model_path']:
@@ -285,8 +285,8 @@ class ModelCleanup:
         logger.info(f"🎯 Plan: Remove {plan_type}")
         logger.info(f"📊 Models to remove: {total_candidates}")
         logger.info(f"📊 Models to keep: {total_kept}")
-        logger.info(".2f")
-        logger.info(".2f")
+        logger.info(f"🗑️  Disk space to free: {size_to_remove:.2f} GB")
+        logger.info(f"💾 Disk space to keep: {size_to_keep:.2f} GB")
 
         if candidates:
             logger.info("\n🗑️  Models to be REMOVED:")
