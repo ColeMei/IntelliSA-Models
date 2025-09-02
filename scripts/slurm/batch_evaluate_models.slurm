@@ -1,6 +1,7 @@
 #!/bin/bash
 # SLURM parameters are set by the Python script that submits this job
 # No need to specify them here as they will be overridden
+# This script is used for batch evaluation of trained models
 
 # Print job information
 echo "========================================="
@@ -76,7 +77,7 @@ srun --unbuffered python scripts/evaluate_models.py \
     --approach encoder \
     --config ${CONFIG_FILE} \
     --test-path ${DATA_CACHE}/chef_test.jsonl \
-    --output-dir ${RESULTS_CACHE}/encoder_eval 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
+    --output-dir ${RESULTS_CACHE} 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
 
 EVAL_EXIT_CODE=$?
 if [ $EVAL_EXIT_CODE -ne 0 ]; then
@@ -108,13 +109,13 @@ cp ${TEMP_LOGS}/* ${PERMANENT_RESULTS_DIR}/ 2>/dev/null || true
 # Copy logs to evaluation logs directory
 cp ${TEMP_LOGS}/* ${EVALUATION_LOGS_DIR}/ 2>/dev/null || true
 
-# Create symlink to latest evaluation results
+# Create symlink to latest batch evaluation results
 cd ${PROJECT_ROOT}/results/experiments/evaluation/
-rm -f evaluation_latest 2>/dev/null || true
-ln -s $(basename ${PERMANENT_RESULTS_DIR}) evaluation_latest
+rm -f batch_evaluation_latest 2>/dev/null || true
+ln -s $(basename ${PERMANENT_RESULTS_DIR}) batch_evaluation_latest
 
 echo "✅ Results copied successfully!"
-echo "  Latest results: ${PROJECT_ROOT}/results/experiments/evaluation/evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
+echo "  Latest results: ${PROJECT_ROOT}/results/experiments/evaluation/batch_evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
 
 # Display storage usage summary
 echo "📊 Storage usage summary:"
@@ -138,11 +139,18 @@ with open('${PERMANENT_RESULTS_DIR}/encoder_eval/evaluation_results.json', 'r') 
 fi
 
 echo "========================================="
-echo "✅ Batch Encoder Evaluation Completed Successfully!"
+echo "✅ Batch Model Evaluation Completed Successfully!"
 echo "End Time: $(date)"
 echo "Job Duration: $((SECONDS / 60)) minutes"
 echo "Results saved to: ${PERMANENT_RESULTS_DIR}"
 echo "========================================="
+
+# Clean up temporary config files
+TEMP_CONFIG_DIR="/tmp/batch_eval_configs"
+if [[ -d "$TEMP_CONFIG_DIR" ]]; then
+    echo "🧹 Cleaning up temporary config files..."
+    rm -rf "$TEMP_CONFIG_DIR" 2>/dev/null || true
+fi
 
 # Note: Fast local storage cleanup is automatic
 echo "🧹 Fast local storage will be automatically cleaned when job completes"
