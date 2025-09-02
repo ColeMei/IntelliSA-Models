@@ -71,16 +71,47 @@ class ModelCleanup:
 
         return model_info
 
+    def check_broken_symlinks(self) -> List[str]:
+        """Check for broken symlinks in results directories."""
+        broken_symlinks = []
+
+        if self.results_dir.exists():
+            for item in self.results_dir.iterdir():
+                if item.is_dir():
+                    model_symlink = item / "model"
+                    if model_symlink.exists() and model_symlink.is_symlink():
+                        if not model_symlink.resolve().exists():
+                            broken_symlinks.append(str(model_symlink))
+
+        return broken_symlinks
+
     def _get_dir_size(self, path: Path) -> float:
-        """Get directory size in GB."""
+        """Get directory size in GB, handling symlinks properly."""
         total_size = 0
-        for dirpath, dirnames, filenames in os.walk(path):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                try:
-                    total_size += os.path.getsize(filepath)
-                except (OSError, FileNotFoundError):
-                    pass
+        try:
+            if path.is_symlink():
+                # For symlinks, get the size of the target if it exists
+                target = path.resolve()
+                if target.exists():
+                    for dirpath, dirnames, filenames in os.walk(target):
+                        for filename in filenames:
+                            filepath = os.path.join(dirpath, filename)
+                            try:
+                                total_size += os.path.getsize(filepath)
+                            except (OSError, FileNotFoundError):
+                                pass
+                # Note: If target doesn't exist, we return 0 (broken symlink)
+            else:
+                # Regular directory
+                for dirpath, dirnames, filenames in os.walk(path):
+                    for filename in filenames:
+                        filepath = os.path.join(dirpath, filename)
+                        try:
+                            total_size += os.path.getsize(filepath)
+                        except (OSError, FileNotFoundError):
+                            pass
+        except (OSError, FileNotFoundError):
+            pass
         return total_size / (1024**3)  # Convert to GB
 
     def show_disk_usage(self):
@@ -88,6 +119,15 @@ class ModelCleanup:
         logger.info("🔍 Analyzing disk usage...")
 
         model_info = self.get_model_sizes()
+
+        # Check for broken symlinks
+        broken_symlinks = self.check_broken_symlinks()
+        if broken_symlinks:
+            logger.warning(f"⚠️  Found {len(broken_symlinks)} broken symlinks:")
+            for symlink in broken_symlinks[:5]:  # Show first 5
+                logger.warning(f"  • {symlink}")
+            if len(broken_symlinks) > 5:
+                logger.warning(f"  ... and {len(broken_symlinks) - 5} more")
 
         # Sort by total size
         sorted_models = sorted(model_info.items(), key=lambda x: x[1]['total_size'], reverse=True)
@@ -101,9 +141,18 @@ class ModelCleanup:
         logger.info(f"📊 Results disk usage: {total_results_size:.2f} GB")
         logger.info(f"📈 Total disk usage: {total_size:.2f} GB")
 
+        # Show symlink status
+        symlink_count = sum(1 for info in model_info.values() if info.get('results_path') and (info['results_path'] / 'model').is_symlink())
+        regular_count = len(model_info) - symlink_count
+        if symlink_count > 0:
+            logger.info(f"🔗 Symlinked results: {symlink_count}")
+        if regular_count > 0:
+            logger.info(f"📁 Regular results: {regular_count}")
+
         logger.info("📁 Largest models (by total size):")
         for name, info in sorted_models[:10]:
-            logger.info(f"  • {name}: {info['total_size']:.2f} GB")
+            status = "🔗" if info.get('results_path') and (info['results_path'] / 'model').is_symlink() else "📁"
+            logger.info(f"  {status} {name}: {info['total_size']:.2f} GB")
 
         # Show directory breakdown
         if self.models_dir.exists():

@@ -120,11 +120,13 @@ mkdir -p ${PERMANENT_MODEL_DIR}
 mkdir -p ${RESULT_DIR}
 mkdir -p ${PROJECT_ROOT}/logs/training/
 
-# Copy model to timestamped location
+# Copy model to timestamped location in models directory
 cp -r ${MODEL_CHECKPOINTS}/* ${PERMANENT_MODEL_DIR}/
 
-# Copy to results directory structure
-cp -r ${MODEL_CHECKPOINTS} ${RESULT_DIR}/model/
+# Create symlink in results directory instead of copying (saves storage)
+ln -s ../../../models/experiments/encoder/$(basename ${PERMANENT_MODEL_DIR}) ${RESULT_DIR}/model
+
+# Copy logs and config to results directory
 cp ${TEMP_LOGS}/* ${RESULT_DIR}/ 2>/dev/null || true
 cp ${CONFIG_FILE} ${RESULT_DIR}/config_used.yaml
 
@@ -143,6 +145,8 @@ echo "  Latest model for ${EXPERIMENT_NAME}: ${LATEST_DIR} -> $(basename ${PERMA
 echo "📊 Storage usage summary:"
 echo "  Fast storage used: $(du -sh ${TRAINING_DIR} | cut -f1)"
 echo "  Final model size: $(du -sh ${PERMANENT_MODEL_DIR} | cut -f1)"
+echo "  Results directory size: $(du -sh ${RESULT_DIR} | cut -f1)"
+echo "  💡 Model files stored only in models/ directory (symlinked in results/)"
 
 echo "========================================="
 echo "✅ Batch encoder training completed successfully!"
