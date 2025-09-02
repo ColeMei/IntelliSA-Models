@@ -102,10 +102,9 @@ class BatchEvaluator:
         # Update output directory
         config['output_dir'] = str(eval_dir)
 
-        # Save custom config in a temporary location (will be cleaned up by SLURM)
-        import tempfile
-        temp_dir = Path(tempfile.gettempdir()) / "batch_eval_configs"
-        temp_dir.mkdir(exist_ok=True)
+        # Save custom config in project directory (shared between login and compute nodes)
+        temp_dir = self.project_root / "tmp" / "batch_eval_configs"
+        temp_dir.mkdir(parents=True, exist_ok=True)
         custom_config_path = temp_dir / f"eval_config_{model_info['name']}.yaml"
         with open(custom_config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
