@@ -146,7 +146,7 @@ echo "Results saved to: ${PERMANENT_RESULTS_DIR}"
 echo "========================================="
 
 # Clean up temporary config files
-TEMP_CONFIG_DIR="${PROJECT_ROOT}/tmp/batch_eval_configs"
+TEMP_CONFIG_DIR="/tmp/batch_eval_configs"
 if [[ -d "$TEMP_CONFIG_DIR" ]]; then
     echo "🧹 Cleaning up temporary config files..."
     rm -rf "$TEMP_CONFIG_DIR" 2>/dev/null || true
