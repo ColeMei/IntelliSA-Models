@@ -290,8 +290,8 @@ def main():
     )
 
     # Prepare datasets
-    train_path = "data/processed/chef_train.jsonl"
-    val_path = "data/processed/chef_val.jsonl"
+    train_path = "data/processed/train.jsonl"
+    val_path = "data/processed/val.jsonl"
     
     trainer.prepare_datasets(train_path, val_path)
     

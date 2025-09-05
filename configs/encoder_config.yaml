@@ -9,8 +9,8 @@ eval_steps: 50
 save_steps: 100
 
 # Data paths (will be overridden by CLI args)
-train_path: "data/processed/chef_train.jsonl"
-val_path: "data/processed/chef_val.jsonl"
+train_path: "data/processed/train.jsonl"
+val_path: "data/processed/val.jsonl"
 output_dir: "models/encoder"
 
 # Training arguments

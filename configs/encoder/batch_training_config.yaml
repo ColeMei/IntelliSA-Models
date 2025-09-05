@@ -12,8 +12,8 @@ global:
   load_best_model_at_end: true
   metric_for_best_model: "f1"
   greater_is_better: true
-  train_path: "data/processed/chef_train.jsonl"
-  val_path: "data/processed/chef_val.jsonl"
+  train_path: "data/processed/train.jsonl"
+  val_path: "data/processed/val.jsonl"
   fp16: true
   dataloader_pin_memory: true
 

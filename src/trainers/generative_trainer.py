@@ -21,6 +21,106 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def load_model_with_retry_generative(model_name: str, use_4bit: bool, bnb_config,
+                                   lora_r: int, lora_alpha: int, lora_dropout: float,
+                                   lora_target_modules: List[str], max_retries: int = 5, base_delay: float = 10.0):
+    """
+    Load tokenizer and model with retry logic for rate limiting and network issues.
+
+    Args:
+        model_name: HuggingFace model name
+        use_4bit: Whether to use 4-bit quantization
+        bnb_config: BitsAndBytes configuration
+        lora_r, lora_alpha, lora_dropout: LoRA parameters
+        lora_target_modules: Target modules for LoRA
+        max_retries: Maximum retry attempts
+        base_delay: Base delay in seconds (exponential backoff)
+
+    Returns:
+        tuple: (tokenizer, model)
+    """
+    import time
+    import random
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Loading {model_name} (attempt {attempt + 1}/{max_retries})")
+
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+
+            # Load model with quantization
+            logger.info(f"Loading model {model_name} with {'4-bit' if use_4bit else 'full'} precision...")
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=True,
+                torch_dtype=torch.bfloat16,
+                use_cache=False  # Disable cache for training
+            )
+
+            # Prepare model for LoRA training if using quantization
+            if use_4bit:
+                model = prepare_model_for_kbit_training(model)
+
+            # Configure LoRA
+            if lora_target_modules is None:
+                # Default target modules for CodeLlama
+                lora_target_modules = [
+                    "q_proj", "v_proj", "k_proj", "o_proj",
+                    "gate_proj", "up_proj", "down_proj"
+                ]
+
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=lora_target_modules,
+                bias="none"
+            )
+
+            # Apply LoRA to the model
+            model = get_peft_model(model, lora_config)
+
+            # Enable gradient checkpointing for memory efficiency
+            try:
+                model.gradient_checkpointing_enable(use_reentrant=False)
+            except TypeError:
+                model.gradient_checkpointing_enable()
+
+            # Print trainable parameters
+            model.print_trainable_parameters()
+
+            logger.info(f"Successfully loaded {model_name}")
+            return tokenizer, model
+
+        except Exception as e:
+            error_str = str(e).lower()
+            is_rate_limit = any(term in error_str for term in ['429', 'rate limit', 'too many requests'])
+            is_network = any(term in error_str for term in ['connection', 'timeout', 'network'])
+
+            if (is_rate_limit or is_network) and attempt < max_retries - 1:
+                # Exponential backoff with jitter
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 5)
+                logger.warning(f"Network/rate limit error loading {model_name}. Retrying in {delay:.1f}s...")
+                time.sleep(delay)
+                continue
+
+            if attempt == max_retries - 1:
+                logger.error(f"Failed to load {model_name} after {max_retries} attempts: {e}")
+                raise
+
+            # For other errors, retry with shorter delay
+            delay = 5 + random.uniform(0, 3)
+            logger.warning(f"Error loading {model_name}: {e}. Retrying in {delay:.1f}s...")
+            time.sleep(delay)
+
+    raise Exception(f"Failed to load {model_name} after {max_retries} attempts")
+
 class IacDetectionDataset(Dataset):
     """Dataset for IaC security smell detection classification using generative approach."""
     
@@ -132,7 +232,7 @@ class GenerativeTrainer:
         self.model_name = model_name
         self.output_dir = output_dir
         self.use_4bit = use_4bit
-        
+
         # Configure quantization for large models
         if use_4bit:
             bnb_config = BitsAndBytesConfig(
@@ -143,55 +243,11 @@ class GenerativeTrainer:
             )
         else:
             bnb_config = None
-        
-        # Initialize tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-        # Initialize model with quantization
-        logger.info(f"Loading model {model_name} with {'4-bit' if use_4bit else 'full'} precision...")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.bfloat16,
-            use_cache=False  # Disable cache for training
+
+        # Initialize tokenizer and model with retry logic
+        self.tokenizer, self.model = load_model_with_retry_generative(
+            model_name, use_4bit, bnb_config, lora_r, lora_alpha, lora_dropout, lora_target_modules
         )
-        
-        # Prepare model for LoRA training if using quantization
-        if use_4bit:
-            self.model = prepare_model_for_kbit_training(self.model)
-        
-        # Configure LoRA
-        if lora_target_modules is None:
-            # Default target modules for CodeLlama
-            lora_target_modules = [
-                "q_proj", "v_proj", "k_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj"
-            ]
-        
-        lora_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            target_modules=lora_target_modules,
-            bias="none"
-        )
-        
-        # Apply LoRA to the model
-        self.model = get_peft_model(self.model, lora_config)
-        
-        # Enable gradient checkpointing for memory efficiency
-        try:
-            self.model.gradient_checkpointing_enable(use_reentrant=False)
-        except TypeError:
-            self.model.gradient_checkpointing_enable()
-        
-        # Print trainable parameters
-        self.model.print_trainable_parameters()
     
     def prepare_datasets(self, train_path: str, val_path: str, max_length: int = 512):
         """Prepare train and validation datasets."""
@@ -451,8 +507,8 @@ def main():
     )
     
     # Prepare datasets
-    train_path = "data/processed/chef_train.jsonl"
-    val_path = "data/processed/chef_val.jsonl"
+    train_path = "data/processed/train.jsonl"
+    val_path = "data/processed/val.jsonl"
     
     trainer.prepare_datasets(train_path, val_path)
     

@@ -30,28 +30,94 @@ from trainers.encoder_trainer import EncoderTrainer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def train_generative(args):
+class ParameterResolver:
+    """Handles parameter resolution with CLI > YAML > approach defaults > parser defaults priority."""
+
+    def __init__(self, approach: str, config_data: Dict[str, Any]):
+        self.approach = approach
+        self.config_data = config_data
+
+        # Approach-specific defaults
+        self.approach_defaults = {
+            "generative": {
+                "batch_size": 1,
+                "num_epochs": 3,
+                "warmup_steps": 100,
+                "save_steps": 100,
+                "eval_steps": 50,
+                "gradient_accumulation_steps": 4,
+                "weight_decay": 0.01,
+            },
+            "encoder": {
+                "batch_size": 8,
+                "num_epochs": 3,
+                "warmup_steps": 100,
+                "save_steps": 100,
+                "eval_steps": 50,
+                "weight_decay": 0.01,
+            },
+        }
+
+    def resolve(self, param_name: str, cli_value: Any, parser_default: Any) -> Any:
+        """Resolve parameter value using priority: CLI > YAML > approach default > parser default."""
+        # If CLI value differs from parser default, use CLI value
+        if cli_value != parser_default:
+            return cli_value
+
+        # Try YAML config
+        yaml_value = self.config_data.get(param_name)
+        if yaml_value is not None:
+            return yaml_value
+
+        # Try approach default
+        approach_defaults = self.approach_defaults.get(self.approach, {})
+        if param_name in approach_defaults:
+            return approach_defaults[param_name]
+
+        # Fall back to parser default
+        return parser_default
+
+def train_generative(args, config_data: Optional[Dict[str, Any]] = None):
     """Train generative model (CodeLLaMA with LoRA)."""
     logger.info("Training generative model")
-    
+
+    # Extract LoRA and optimization parameters from config
+    lora_config = config_data.get("lora", {}) if config_data else {}
+    use_4bit = config_data.get("use_4bit", True) if config_data else True
+    gradient_accumulation_steps = config_data.get("gradient_accumulation_steps", 4) if config_data else 4
+    weight_decay = config_data.get("weight_decay", 0.01) if config_data else 0.01
+
+    # Extract LoRA parameters
+    lora_r = lora_config.get("r", 16)
+    lora_alpha = lora_config.get("lora_alpha", 32)
+    lora_dropout = lora_config.get("lora_dropout", 0.1)
+    lora_target_modules = lora_config.get("target_modules", ["q_proj", "v_proj", "k_proj", "o_proj"])
+
     trainer = GenerativeTrainer(
         model_name=args.model_name,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        use_4bit=use_4bit,
+        lora_r=lora_r,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        lora_target_modules=lora_target_modules
     )
-    
+
     # Prepare datasets
     trainer.prepare_datasets(args.train_path, args.val_path)
-    
-    # Train the model
+
+    # Train the model with all parameters
     trainer.train(
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         num_epochs=args.num_epochs,
         warmup_steps=args.warmup_steps,
         save_steps=args.save_steps,
-        eval_steps=args.eval_steps
+        eval_steps=args.eval_steps,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        weight_decay=weight_decay
     )
-    
+
     logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
 
 def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
@@ -226,45 +292,14 @@ def main():
     if args.output_dir is None:
         args.output_dir = config_data.get("output_dir", f"models/{args.approach}")
 
-    # Training hyperparameters from YAML if CLI at defaults
-    # Note: CLI values override YAML. We treat parser defaults as "not explicitly set".
-    parser_defaults = {
-        "batch_size": 2,
-        "num_epochs": 2,
-        "warmup_steps": 10,
-        "save_steps": 50,
-        "eval_steps": 25,
-    }
-    # Approach-specific sensible defaults if not in YAML either
-    approach_defaults = {
-        "generative": {
-            "batch_size": 1,
-            "num_epochs": 3,
-            "warmup_steps": 100,
-            "save_steps": 100,
-            "eval_steps": 50,
-        },
-        "encoder": {
-            "batch_size": 8,
-            "num_epochs": 3,
-            "warmup_steps": 100,
-            "save_steps": 100,
-            "eval_steps": 50,
-        },
-    }
+    # Standardize parameter resolution: CLI > YAML > approach defaults > parser defaults
+    param_resolver = ParameterResolver(args.approach, config_data)
 
-    def resolve_hp(name: str) -> int:
-        cli_value = getattr(args, name)
-        if cli_value == parser_defaults[name]:
-            # Not explicitly set; try YAML then approach default
-            return int(config_data.get(name, approach_defaults[args.approach][name]))
-        return int(cli_value)
-
-    args.batch_size = resolve_hp("batch_size")
-    args.num_epochs = resolve_hp("num_epochs")
-    args.warmup_steps = resolve_hp("warmup_steps")
-    args.save_steps = resolve_hp("save_steps")
-    args.eval_steps = resolve_hp("eval_steps")
+    args.batch_size = param_resolver.resolve("batch_size", getattr(args, "batch_size"), 8)
+    args.num_epochs = param_resolver.resolve("num_epochs", getattr(args, "num_epochs"), 3)
+    args.warmup_steps = param_resolver.resolve("warmup_steps", getattr(args, "warmup_steps"), 100)
+    args.save_steps = param_resolver.resolve("save_steps", getattr(args, "save_steps"), 100)
+    args.eval_steps = param_resolver.resolve("eval_steps", getattr(args, "eval_steps"), 50)
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -303,49 +338,7 @@ def main():
 
     # Train based on approach
     if args.approach == "generative":
-        # Pull optional config-only fields for generative
-        max_length = int(config_data.get("max_length", 512))
-        # lora block
-        lora_cfg = config_data.get("lora", {}) if isinstance(config_data.get("lora", {}), dict) else {}
-        lora_r = int(lora_cfg.get("r", 16))
-        lora_alpha = int(lora_cfg.get("lora_alpha", 32))
-        lora_dropout = float(lora_cfg.get("lora_dropout", 0.1))
-        lora_target_modules = lora_cfg.get("target_modules", None)
-        # training arg toggles
-        evaluation_strategy = config_data.get("evaluation_strategy", "steps")
-        save_strategy = config_data.get("save_strategy", "steps")
-        logging_steps = int(config_data.get("logging_steps", 10))
-        load_best_model_at_end = bool(config_data.get("load_best_model_at_end", True))
-        metric_for_best_model = config_data.get("metric_for_best_model", "eval_loss")
-        greater_is_better = bool(config_data.get("greater_is_better", False))
-        fp16 = bool(config_data.get("fp16", True))
-
-        # Initialize trainer with LoRA params
-        trainer = GenerativeTrainer(
-            model_name=args.model_name,
-            output_dir=args.output_dir,
-            lora_r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            lora_target_modules=lora_target_modules,
-        )
-        trainer.prepare_datasets(args.train_path, args.val_path, max_length=max_length)
-        trainer.train(
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            num_epochs=args.num_epochs,
-            warmup_steps=args.warmup_steps,
-            save_steps=args.save_steps,
-            eval_steps=args.eval_steps,
-            evaluation_strategy=evaluation_strategy,
-            save_strategy=save_strategy,
-            logging_steps=logging_steps,
-            load_best_model_at_end=load_best_model_at_end,
-            metric_for_best_model=metric_for_best_model,
-            greater_is_better=greater_is_better,
-            fp16=fp16,
-        )
-        logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
+        train_generative(args, config_data)
     else:
         train_encoder(args, config_data)
 

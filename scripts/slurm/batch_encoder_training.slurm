@@ -70,14 +70,14 @@ echo "📋 Staging data to fast local storage..."
 cp -r ${PROJECT_ROOT}/data/processed/* ${DATA_CACHE}/
 
 # Verify data exists on fast storage
-if [[ ! -f "${DATA_CACHE}/chef_train.jsonl" ]]; then
+if [[ ! -f "${DATA_CACHE}/train.jsonl" ]]; then
     echo "❌ Training data not found on fast storage! Exiting..."
     exit 1
 fi
 
 echo "✅ Data staged successfully to fast storage"
-echo "  Training data: ${DATA_CACHE}/chef_train.jsonl"
-echo "  Validation data: ${DATA_CACHE}/chef_val.jsonl"
+echo "  Training data: ${DATA_CACHE}/train.jsonl"
+echo "  Validation data: ${DATA_CACHE}/val.jsonl"
 
 # Run encoder training with error handling
 echo "🚀 Starting batch encoder training on fast storage..."

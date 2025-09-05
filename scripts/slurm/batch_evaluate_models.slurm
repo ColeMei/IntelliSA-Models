@@ -60,10 +60,10 @@ mkdir -p ${TEMP_LOGS}
 
 # Copy test data to fast local storage
 echo "📋 Staging test data to fast local storage..."
-cp -r ${PROJECT_ROOT}/data/processed/chef_test.jsonl ${DATA_CACHE}/
+cp -r ${PROJECT_ROOT}/data/processed/test.jsonl ${DATA_CACHE}/
 
 # Verify test data exists
-if [[ ! -f "${DATA_CACHE}/chef_test.jsonl" ]]; then
+if [[ ! -f "${DATA_CACHE}/test.jsonl" ]]; then
     echo "❌ Test data not found on fast storage! Exiting..."
     exit 1
 fi

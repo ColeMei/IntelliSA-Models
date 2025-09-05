@@ -15,9 +15,13 @@ lora:
   lora_dropout: 0.1
   target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
 
+# Memory optimization
+use_4bit: true # Enable 4-bit quantization for memory efficiency
+gradient_accumulation_steps: 4 # Accumulate gradients for effective batch size
+
 # Data paths (will be overridden by CLI args)
-train_path: "data/processed/chef_train.jsonl"
-val_path: "data/processed/chef_val.jsonl"
+train_path: "data/processed/train.jsonl"
+val_path: "data/processed/val.jsonl"
 output_dir: "models/generative"
 
 # Training arguments
@@ -28,3 +32,4 @@ load_best_model_at_end: true
 metric_for_best_model: "eval_loss"
 greater_is_better: false
 fp16: true
+weight_decay: 0.01
