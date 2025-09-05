@@ -269,6 +269,7 @@ class GenerativeTrainer:
         metric_for_best_model: str = "eval_loss",
         greater_is_better: bool = False,
         fp16: bool = True,
+        weight_decay: float = 0.01,
     ):
         """Train the model."""
         
@@ -288,6 +289,7 @@ class GenerativeTrainer:
             load_best_model_at_end=load_best_model_at_end,
             metric_for_best_model=metric_for_best_model,
             greater_is_better=greater_is_better,
+            weight_decay=weight_decay,
             bf16=True,  # Use bfloat16 instead of fp16 for better stability
             dataloader_pin_memory=False,
             remove_unused_columns=False,  # Keep our custom fields
