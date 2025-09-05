@@ -81,8 +81,8 @@ def load_model_with_retry(model_name: str, num_labels: int = 2, max_retries: int
     
     raise Exception(f"Failed to load {model_name} after {max_retries} attempts")
 
-class ChefDetectionDataset(Dataset):
-    """Dataset for Chef detection classification using encoder approach."""
+class IacDetectionDataset(Dataset):
+    """Dataset for IaC security smell detection classification using encoder approach."""
     
     def __init__(self, data_path: str, tokenizer, max_length: int = 256):
         self.tokenizer = tokenizer
@@ -157,7 +157,7 @@ def compute_metrics(pred):
     }
 
 class EncoderTrainer:
-    """Trainer for encoder approach using CodeBERT/CodeT5."""
+    """Trainer for encoder approach using CodeBERT/CodeT5 for IaC security smell detection."""
     
     def __init__(
         self,
@@ -176,8 +176,8 @@ class EncoderTrainer:
     
     def prepare_datasets(self, train_path: str, val_path: str):
         """Prepare train and validation datasets."""
-        self.train_dataset = ChefDetectionDataset(train_path, self.tokenizer)
-        self.val_dataset = ChefDetectionDataset(val_path, self.tokenizer)
+        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer)
+        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer)
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")

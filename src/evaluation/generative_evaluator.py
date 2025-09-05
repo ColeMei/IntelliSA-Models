@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class GenerativeEvaluator:
-    """Evaluator for generative approach using fine-tuned CodeLLaMA with LoRA."""
+    """Evaluator for generative approach using fine-tuned CodeLLaMA with LoRA for IaC security smell detection."""
     
     def __init__(
         self,

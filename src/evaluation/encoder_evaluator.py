@@ -13,8 +13,8 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ChefTestDataset(Dataset):
-    """Dataset for Chef detection test data."""
+class IacTestDataset(Dataset):
+    """Dataset for IaC security smell detection test data."""
     
     def __init__(self, data_path: str, tokenizer, max_length: int = 512):
         self.tokenizer = tokenizer
@@ -58,7 +58,7 @@ class ChefTestDataset(Dataset):
         }
 
 class EncoderEvaluator:
-    """Evaluator for encoder approach using fine-tuned CodeBERT/CodeT5."""
+    """Evaluator for encoder approach using fine-tuned CodeBERT/CodeT5 for IaC security smell detection."""
     
     def __init__(self, model_path: str, output_dir: str):
         self.model_path = Path(model_path)
@@ -87,9 +87,9 @@ class EncoderEvaluator:
         
         logger.info(f"Model loaded successfully")
     
-    def _load_test_data(self, test_path: str, max_samples: Optional[int] = None) -> ChefTestDataset:
+    def _load_test_data(self, test_path: str, max_samples: Optional[int] = None) -> IacTestDataset:
         """Load test dataset."""
-        dataset = ChefTestDataset(test_path, self.tokenizer)
+        dataset = IacTestDataset(test_path, self.tokenizer)
         
         if max_samples:
             # Limit dataset size for testing

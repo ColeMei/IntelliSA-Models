@@ -1,4 +1,4 @@
-# Evaluation configuration for Chef detection models
+# Evaluation configuration for IaC security smell detection models
 
 # Core evaluation settings
 evaluation:

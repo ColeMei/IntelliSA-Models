@@ -6,14 +6,19 @@ This repository contains the training infrastructure for Stage 2 & Stage 3 of th
 
 ## 🎯 Project Overview
 
-**Problem**: Static analysis tools (even SOTA like GLITCH) generate high false positives (FP).
+**Problem**: Static analysis tools (even SOTA like GLITCH) generate high false positives (FP) across different IaC technologies.
 
-**Solution**: Use LLM power to filter/reduce FP → making static analysis more usable.
+**Solution**: Use LLM power to filter/reduce FP → making static analysis more usable across Chef, Ansible, and Puppet.
 
 **Approach**: Compare two training strategies:
 
 - **Generative LLMs** (CodeLLaMA + LoRA): Context-aware reasoning with prompts
 - **Encoder-only LLMs** (CodeBERT/CodeT5): Efficient binary classification
+
+**Training Modes**: Support both combined and separate training:
+
+- **Combined Training**: One model trained on all IaC technologies together
+- **Separate Training**: Individual models per technology (Chef/Ansible/Puppet)
 
 ## 📁 Repository Structure
 
@@ -60,6 +65,33 @@ llm-iac-seceval-models/
 - Performance metrics: Precision, Recall, F1, FP reduction rate
 - Cost-benefit analysis: Local fine-tuned vs. API calls
 - Scaling study: 7B → 13B → 32B model comparison
+
+## 🚀 Training Examples
+
+### Combined Training (Recommended)
+
+```bash
+# Train one model on all technologies combined
+python scripts/train_models.py --approach encoder --combined
+
+# Evaluate on each technology separately
+python scripts/evaluate_models.py --approach encoder --technology chef --model-path models/encoder
+python scripts/evaluate_models.py --approach encoder --technology ansible --model-path models/encoder
+python scripts/evaluate_models.py --approach encoder --technology puppet --model-path models/encoder
+```
+
+### Separate Training
+
+```bash
+# Train separate models per technology
+python scripts/train_models.py --approach encoder --technology chef
+python scripts/train_models.py --approach encoder --technology ansible
+python scripts/train_models.py --approach encoder --technology puppet
+
+# Evaluate each model on its respective technology
+python scripts/evaluate_models.py --approach encoder --technology chef --model-path models/encoder_chef
+python scripts/evaluate_models.py --approach encoder --technology ansible --model-path models/encoder_ansible
+```
 
 ## 📊 Model Configurations
 

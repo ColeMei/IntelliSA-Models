@@ -21,8 +21,8 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ChefDetectionDataset(Dataset):
-    """Dataset for Chef detection classification using generative approach."""
+class IacDetectionDataset(Dataset):
+    """Dataset for IaC security smell detection classification using generative approach."""
     
     def __init__(self, data_path: str, tokenizer, max_length: int = 512):
         self.tokenizer = tokenizer
@@ -117,7 +117,7 @@ class ChefDetectionDataset(Dataset):
         }
 
 class GenerativeTrainer:
-    """Trainer for generative approach using CodeLLaMA with LoRA."""
+    """Trainer for generative approach using CodeLLaMA with LoRA for IaC security smell detection."""
     
     def __init__(
         self,
@@ -195,8 +195,8 @@ class GenerativeTrainer:
     
     def prepare_datasets(self, train_path: str, val_path: str, max_length: int = 512):
         """Prepare train and validation datasets."""
-        self.train_dataset = ChefDetectionDataset(train_path, self.tokenizer, max_length=max_length)
-        self.val_dataset = ChefDetectionDataset(val_path, self.tokenizer, max_length=max_length)
+        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer, max_length=max_length)
+        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer, max_length=max_length)
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")

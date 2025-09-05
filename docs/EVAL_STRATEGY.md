@@ -1,8 +1,8 @@
 # EVAL_STRATEGY.md
 
-## Chef Detection Model Evaluation Strategy
+## IaC Security Smell Detection Model Evaluation Strategy
 
-A unified evaluation framework for comparing generative (CodeLLaMA) and encoder (CodeBERT) approaches on Chef detection classification.
+A unified evaluation framework for comparing generative (CodeLLaMA) and encoder (CodeBERT) approaches on IaC security smell detection across multiple technologies (Chef, Ansible, Puppet).
 
 ## Architecture Overview
 

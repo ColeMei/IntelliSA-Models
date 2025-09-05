@@ -338,7 +338,7 @@ class ModelComparator:
             </style>
         </head>
         <body>
-            <h1>Chef Detection Model Comparison Report</h1>
+            <h1>IaC Security Smell Detection Model Comparison Report</h1>
             
             <h2>Summary</h2>
             <p><strong>Test Dataset:</strong> {comparison_results['test_path']}</p>

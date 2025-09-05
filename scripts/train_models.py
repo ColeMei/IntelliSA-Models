@@ -3,7 +3,7 @@
 Main training interface for Stage 2 - Model Training Approaches.
 
 This script provides a unified interface to train both generative and encoder models
-for Chef detection classification.
+for IaC security smell detection classification.
 """
 
 import argparse
@@ -104,7 +104,7 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
     logger.info(f" Encoder model training completed. Model saved to {args.output_dir}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Chef detection models")
+    parser = argparse.ArgumentParser(description="Train IaC security smell detection models")
     parser.add_argument(
         "--approach", 
         choices=["generative", "encoder"], 
@@ -122,14 +122,25 @@ def main():
         help="Model name (defaults to recommended models for each approach)"
     )
     parser.add_argument(
-        "--train-path",
-        default="data/processed/chef_train.jsonl",
-        help="Path to training data"
+        "--combined",
+        action="store_true",
+        help="Train on combined dataset across all technologies (default: False)"
     )
     parser.add_argument(
-        "--val-path", 
-        default="data/processed/chef_val.jsonl",
-        help="Path to validation data"
+        "--technology",
+        default="chef",
+        choices=["chef", "ansible", "puppet"],
+        help="IaC technology to train on when not using --combined (default: chef)"
+    )
+    parser.add_argument(
+        "--train-path",
+        default=None,
+        help="Path to training data (auto-set based on --combined or --technology if not provided)"
+    )
+    parser.add_argument(
+        "--val-path",
+        default=None,
+        help="Path to validation data (auto-set based on --combined or --technology if not provided)"
     )
     parser.add_argument(
         "--output-dir",
@@ -174,7 +185,19 @@ def main():
     )
     
     args = parser.parse_args()
-    
+
+    # Set default paths based on combined flag or technology
+    if args.train_path is None:
+        if args.combined:
+            args.train_path = "data/processed/train.jsonl"
+        else:
+            args.train_path = f"data/processed/{args.technology}/train.jsonl"
+    if args.val_path is None:
+        if args.combined:
+            args.val_path = "data/processed/val.jsonl"
+        else:
+            args.val_path = f"data/processed/{args.technology}/val.jsonl"
+
     # Set environment to silence tokenizers fork-parallel warnings
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 

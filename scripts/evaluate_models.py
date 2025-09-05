@@ -3,7 +3,7 @@
 Main evaluation interface for Stage 3 - Model Evaluation.
 
 This script provides a unified interface to evaluate both generative and encoder models
-on the Chef detection test dataset.
+on IaC security smell detection test datasets.
 """
 
 import argparse
@@ -140,7 +140,7 @@ def compare_models(args, config_data):
     return comparison_results
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate Chef detection models")
+    parser = argparse.ArgumentParser(description="Evaluate IaC security smell detection models")
     parser.add_argument(
         "--approach", 
         choices=["generative", "encoder", "compare"], 
@@ -163,9 +163,20 @@ def main():
         help="Paths to multiple trained models (for comparison)"
     )
     parser.add_argument(
+        "--combined",
+        action="store_true",
+        help="Evaluate on combined test dataset across all technologies (default: False)"
+    )
+    parser.add_argument(
+        "--technology",
+        default="chef",
+        choices=["chef", "ansible", "puppet"],
+        help="IaC technology to evaluate on when not using --combined (default: chef)"
+    )
+    parser.add_argument(
         "--test-path",
-        default="data/processed/chef_test.jsonl",
-        help="Path to test data"
+        default=None,
+        help="Path to test data (auto-set based on --combined or --technology if not provided)"
     )
     parser.add_argument(
         "--output-dir",
@@ -206,6 +217,13 @@ def main():
             with open(args.config, 'r') as f:
                 config_data = yaml.safe_load(f) or {}
     
+    # Set default test path based on combined flag or technology
+    if args.test_path is None:
+        if args.combined:
+            args.test_path = "data/processed/test.jsonl"
+        else:
+            args.test_path = f"data/processed/{args.technology}/test.jsonl"
+
     # Apply config defaults where CLI args not provided
     eval_config = config_data.get('evaluation', {})
 
@@ -213,7 +231,8 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         args.output_dir = eval_config.get("output_dir", f"results/evaluation_{timestamp}")
 
-    if args.test_path == "data/processed/chef_test.jsonl":  # Default value
+    default_test_path = "data/processed/test.jsonl" if args.combined else f"data/processed/{args.technology}/test.jsonl"
+    if args.test_path == default_test_path:  # Default value
         args.test_path = eval_config.get("test_path", args.test_path)
 
     # Apply global config values (model-specific settings will override these later)

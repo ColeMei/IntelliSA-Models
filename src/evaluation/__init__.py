@@ -1,5 +1,5 @@
 """
-Evaluation module for Chef detection models.
+Evaluation module for IaC security smell detection models.
 """
 
 from .model_comparator import ModelComparator

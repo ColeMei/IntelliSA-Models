@@ -225,7 +225,7 @@ with open('${PERMANENT_RESULTS_DIR}/comparison/model_comparison.json', 'r') as f
 fi
 
 echo "========================================="
-echo "✅ Chef Detection Model Evaluation Completed Successfully!"
+echo "✅ IaC Security Smell Detection Model Evaluation Completed Successfully!"
 echo "End Time: $(date)"
 echo "Job Duration: $((SECONDS / 60)) minutes"
 echo "Results saved to: ${PERMANENT_RESULTS_DIR}"
