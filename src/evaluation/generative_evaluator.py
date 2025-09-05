@@ -108,7 +108,7 @@ class GenerativeEvaluator:
             parts = with_prompt.split('Return ONLY JSON:')
             instruction = parts[0].strip()
             # Add back the response format requirement
-            instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO","confidence":0.0-1.0}'
+            instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO"}'
         else:
             instruction = with_prompt
         
@@ -168,28 +168,27 @@ class GenerativeEvaluator:
             # Try to find and parse JSON in the response
             json_pattern = r'\{[^}]*\}'
             json_matches = re.findall(json_pattern, generated_text)
-            
+
             for json_str in json_matches:
                 try:
                     # Clean up common JSON formatting issues
                     cleaned_json = re.sub(r'([{,]\s*)(\w+):', r'\1"\2":', json_str)  # Quote keys
                     cleaned_json = re.sub(r':\s*([^",}\s]+)([,}])', r': "\1"\2', cleaned_json)  # Quote values
-                    
+
                     response_data = json.loads(cleaned_json)
                     decision = response_data.get("decision", "").upper()
-                    confidence = float(response_data.get("confidence", 0.5))
-                    
+
                     # Map decision to prediction label
                     # During training: TP -> YES, FP -> NO
                     # During evaluation: YES -> TP, NO -> FP
                     if decision == "YES":
-                        return "TP", confidence
+                        return "TP", 1.0
                     elif decision == "NO":
-                        return "FP", confidence
+                        return "FP", 0.0
                     else:
                         if sample_id < 5:
                             logger.info(f"Sample {sample_id}: Invalid decision '{decision}', using fallback")
-                        return "FP", 0.5
+                        return "FP", 0.0
                         
                 except json.JSONDecodeError:
                     continue
@@ -197,18 +196,18 @@ class GenerativeEvaluator:
             # Fallback: look for keywords if JSON parsing fails
             text_upper = generated_text.upper()
             if 'YES' in text_upper or '"YES"' in text_upper:
-                return "TP", 0.8
+                return "TP", 1.0
             elif 'NO' in text_upper or '"NO"' in text_upper:
-                return "FP", 0.8
+                return "FP", 0.0
             else:
                 if sample_id < 5:
                     logger.info(f"Sample {sample_id}: No clear decision found, using fallback")
-                return "FP", 0.5
+                return "FP", 0.0
                 
         except Exception as e:
             if sample_id < 5:
                 logger.error(f"Sample {sample_id}: Error parsing response: {e}")
-            return "FP", 0.5
+            return "FP", 0.0
     
     def evaluate(
         self,

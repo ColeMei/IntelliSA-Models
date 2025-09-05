@@ -186,7 +186,6 @@ class EncoderEvaluator:
                 'file': sample.get('file', 'unknown'),
                 'true_label': sample['label'],
                 'predicted_label': 'TP' if y_pred[i] == 1 else 'FP',
-                'confidence': float(confidences[i]),
                 'probabilities': {
                     'FP': float(probs[i][0]),
                     'TP': float(probs[i][1])
@@ -219,7 +218,6 @@ class EncoderEvaluator:
                 'tp': int(cm[1, 1]) if cm.shape == (2, 2) else 0,
             },
             'smell_metrics': smell_metrics,
-            'average_confidence': float(np.mean(confidences)),
             'predictions_summary': {
                 'total_tp_predicted': int(np.sum(y_pred == 1)),
                 'total_fp_predicted': int(np.sum(y_pred == 0)),

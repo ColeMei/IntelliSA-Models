@@ -103,8 +103,7 @@ class IacDetectionDataset(Dataset):
                 data.append({
                     'input_text': input_text,
                     'target': target,
-                    'smell': sample['smell'],
-                    'confidence': sample['confidence']
+                    'smell': sample['smell']
                 })
         return data
     

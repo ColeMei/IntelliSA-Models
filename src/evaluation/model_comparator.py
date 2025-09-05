@@ -36,7 +36,6 @@ class ModelComparator:
                 'precision': metrics.get('precision', 0.0),
                 'recall': metrics.get('recall', 0.0),
                 'f1': metrics.get('f1', 0.0),
-                'avg_confidence': results.get('average_confidence', 0.0),
                 'eval_time': results.get('evaluation_time', 0.0),
                 'num_samples': results.get('num_samples', 0)
             })
@@ -352,7 +351,6 @@ class ModelComparator:
                     <th>Precision</th>
                     <th>Recall</th>
                     <th>F1-Score</th>
-                    <th>Avg Confidence</th>
                     <th>Eval Time (s)</th>
                 </tr>
         """
@@ -371,7 +369,6 @@ class ModelComparator:
                     <td{'class="best"' if row['precision'] == best_prec else ''}>{row['precision']:.4f}</td>
                     <td{'class="best"' if row['recall'] == best_rec else ''}>{row['recall']:.4f}</td>
                     <td{'class="best"' if row['f1'] == best_f1 else ''}>{row['f1']:.4f}</td>
-                    <td>{row['avg_confidence']:.4f}</td>
                     <td>{row['eval_time']:.2f}</td>
                 </tr>
             """

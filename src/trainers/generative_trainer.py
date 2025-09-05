@@ -138,33 +138,23 @@ class IacDetectionDataset(Dataset):
                 
                 # Extract the instruction part from with_prompt
                 with_prompt = sample['with_prompt']
-                
-                # The with_prompt already contains the full instruction
-                # We need to separate instruction from expected response format
-                if 'Return ONLY JSON:' in with_prompt:
-                    # Split at "Return ONLY JSON:" to get just the instruction
-                    parts = with_prompt.split('Return ONLY JSON:')
-                    instruction = parts[0].strip()
-                    # Add back the response format requirement
-                    instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO","confidence":0.0-1.0}'
-                else:
-                    instruction = with_prompt
+
+                # The with_prompt already contains the clean instruction (JSON suffix removed)
+                instruction = with_prompt
                 
                 # Create the expected JSON response based on label
                 label = sample['label']  # TP or FP
-                confidence = sample.get('confidence', 1.0)
-                
+
                 # Convert TP/FP to YES/NO
                 # TP = True Positive = vulnerability correctly identified = YES
                 # FP = False Positive = incorrectly flagged as vulnerability = NO
                 decision = "YES" if label == "TP" else "NO"
-                target_response = json.dumps({"decision": decision, "confidence": confidence})
-                
+                target_response = json.dumps({"decision": decision})
+
                 data.append({
                     'instruction': instruction,
                     'target_response': target_response,
                     'original_label': label,
-                    'confidence': confidence,
                     'smell': sample['smell']
                 })
         
@@ -491,7 +481,6 @@ class GenerativeTrainer:
         
         return {
             'prediction': 'TP' if decision == 1 else 'FP',
-            'confidence': 1.0,  # Could extract from JSON if needed
             'raw_response': generated_text,
             'full_response': self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         }
