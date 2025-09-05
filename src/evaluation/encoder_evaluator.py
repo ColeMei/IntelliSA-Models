@@ -156,7 +156,6 @@ class EncoderEvaluator:
 
         # Get prediction probabilities
         probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
-        confidences = np.max(probs, axis=1)
         
         # Calculate detailed metrics
         accuracy = accuracy_score(y_true, y_pred)

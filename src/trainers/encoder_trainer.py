@@ -275,7 +275,6 @@ class EncoderTrainer:
         
         return {
             'prediction': 'TP' if prediction.item() == 1 else 'FP',
-            'confidence': probs.max().item(),
             'probabilities': probs.squeeze().tolist()
         }
 

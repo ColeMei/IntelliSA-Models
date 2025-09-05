@@ -27,7 +27,7 @@ evaluation/
 
 - Loads fine-tuned CodeBERT classification model
 - Uses raw code content (no prompts)
-- Binary classification with confidence scores
+- Binary classification (TP/FP detection)
 - Batch processing for efficiency
 
 ### 3. ModelComparator

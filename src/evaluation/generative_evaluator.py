@@ -154,16 +154,16 @@ class GenerativeEvaluator:
                 logger.info(f"Sample {sample_id} generated: '{generated_text}'")
             
             # Parse the response
-            prediction, confidence = self._parse_response(generated_text, sample_id)
-            
-            return prediction, confidence
+            prediction = self._parse_response(generated_text, sample_id)
+
+            return prediction
             
         except Exception as e:
             logger.error(f"Error generating for sample {sample_id}: {e}")
-            return "FP", 0.5  # Default fallback
+            return "FP"  # Default fallback
     
-    def _parse_response(self, generated_text: str, sample_id: int) -> Tuple[str, float]:
-        """Parse model response to extract prediction and confidence."""
+    def _parse_response(self, generated_text: str, sample_id: int) -> str:
+        """Parse model response to extract prediction."""
         try:
             # Try to find and parse JSON in the response
             json_pattern = r'\{[^}]*\}'
@@ -182,13 +182,13 @@ class GenerativeEvaluator:
                     # During training: TP -> YES, FP -> NO
                     # During evaluation: YES -> TP, NO -> FP
                     if decision == "YES":
-                        return "TP", 1.0
+                        return "TP"
                     elif decision == "NO":
-                        return "FP", 0.0
+                        return "FP"
                     else:
                         if sample_id < 5:
                             logger.info(f"Sample {sample_id}: Invalid decision '{decision}', using fallback")
-                        return "FP", 0.0
+                        return "FP"
                         
                 except json.JSONDecodeError:
                     continue
@@ -196,18 +196,18 @@ class GenerativeEvaluator:
             # Fallback: look for keywords if JSON parsing fails
             text_upper = generated_text.upper()
             if 'YES' in text_upper or '"YES"' in text_upper:
-                return "TP", 1.0
+                return "TP"
             elif 'NO' in text_upper or '"NO"' in text_upper:
-                return "FP", 0.0
+                return "FP"
             else:
                 if sample_id < 5:
                     logger.info(f"Sample {sample_id}: No clear decision found, using fallback")
-                return "FP", 0.0
+                return "FP"
                 
         except Exception as e:
             if sample_id < 5:
                 logger.error(f"Sample {sample_id}: Error parsing response: {e}")
-            return "FP", 0.0
+            return "FP"
     
     def evaluate(
         self,
@@ -229,21 +229,19 @@ class GenerativeEvaluator:
         # Run predictions
         predictions = []
         true_labels = []
-        confidences = []
         detailed_results = []
-        
+
         start_time = time.time()
-        
+
         for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
             try:
                 true_label = sample['label']  # Should be TP or FP
-                
+
                 # Make prediction
-                pred_label, confidence = self._predict_single(sample, i)
-                
+                pred_label = self._predict_single(sample, i)
+
                 predictions.append(pred_label)
                 true_labels.append(true_label)
-                confidences.append(confidence)
                 
                 # Store detailed result
                 detailed_result = {
@@ -253,7 +251,6 @@ class GenerativeEvaluator:
                     'line': sample.get('line', 0),
                     'true_label': true_label,
                     'predicted_label': pred_label,
-                    'confidence': confidence,
                     'match': pred_label == true_label,
                     'content': sample.get('content', '')[:200] + '...',  # Truncate for readability
                 }
@@ -272,7 +269,6 @@ class GenerativeEvaluator:
                 # Use default values for failed samples
                 predictions.append("FP")
                 true_labels.append(sample['label'])
-                confidences.append(0.0)
                 detailed_results.append({
                     'sample_id': i,
                     'smell': sample.get('smell', 'unknown'),
@@ -280,7 +276,6 @@ class GenerativeEvaluator:
                     'line': sample.get('line', 0),
                     'true_label': sample['label'],
                     'predicted_label': "FP",
-                    'confidence': 0.0,
                     'match': False,
                     'error': str(e),
                     'content': sample.get('content', '')[:200] + '...',
@@ -331,7 +326,6 @@ class GenerativeEvaluator:
                 'tp': int(cm[1, 1]) if cm.shape == (2, 2) else 0,
             },
             'smell_metrics': smell_metrics,
-            'average_confidence': float(np.mean(confidences)) if confidences else 0.0,
             'predictions_summary': {
                 'total_tp_predicted': sum(1 for p in predictions if p == "TP"),
                 'total_fp_predicted': sum(1 for p in predictions if p == "FP"),
