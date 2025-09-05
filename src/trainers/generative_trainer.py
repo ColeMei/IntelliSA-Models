@@ -166,14 +166,14 @@ class IacDetectionDataset(Dataset):
     
     def __getitem__(self, idx):
         sample = self.data[idx]
-        
+
         # Format using CodeLlama instruction template
         instruction = sample['instruction']
         response = sample['target_response']
-        
+
         # Use CodeLlama's instruction format
         full_text = f"<s>[INST] {instruction} [/INST] {response}</s>"
-        
+
         # Tokenize the full conversation
         full_encoding = self.tokenizer(
             full_text,
@@ -182,7 +182,7 @@ class IacDetectionDataset(Dataset):
             padding=False,  # Let the data collator handle padding
             return_tensors='pt'
         )
-        
+
         # Tokenize just the instruction part to find where response starts
         instruction_part = f"<s>[INST] {instruction} [/INST] "
         instruction_encoding = self.tokenizer(
@@ -192,17 +192,28 @@ class IacDetectionDataset(Dataset):
             padding=False,
             return_tensors='pt'
         )
-        
+
         # Create labels for training - only compute loss on response tokens
         labels = full_encoding['input_ids'].clone()
         instruction_length = instruction_encoding['input_ids'].shape[1]
-        
+
+        # Ensure labels has same length as input_ids
+        if labels.shape[1] != full_encoding['input_ids'].shape[1]:
+            # Truncate or pad labels to match input_ids length
+            target_length = full_encoding['input_ids'].shape[1]
+            if labels.shape[1] > target_length:
+                labels = labels[:, :target_length]
+            else:
+                # Pad with -100
+                padding = torch.full((1, target_length - labels.shape[1]), -100)
+                labels = torch.cat([labels, padding], dim=1)
+
         # Mask instruction tokens (set to -100 so they're ignored in loss computation)
-        labels[:, :instruction_length] = -100
-        
+        labels[:, :min(instruction_length, labels.shape[1])] = -100
+
         return {
             'input_ids': full_encoding['input_ids'].squeeze(),
-            'attention_mask': full_encoding['attention_mask'].squeeze(), 
+            'attention_mask': full_encoding['attention_mask'].squeeze(),
             'labels': labels.squeeze()
         }
 
