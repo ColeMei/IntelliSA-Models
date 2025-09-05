@@ -415,7 +415,7 @@ def main():
     )
     
     results = evaluator.evaluate(
-        test_path="data/processed/chef_test.jsonl",
+        test_path="data/processed/test.jsonl",
         max_samples=None,  # Evaluate all samples
         save_predictions=True
     )

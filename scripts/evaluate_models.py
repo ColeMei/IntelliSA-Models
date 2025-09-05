@@ -33,10 +33,55 @@ from evaluation.encoder_evaluator import EncoderEvaluator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class EvaluationParameterResolver:
+    """Handles parameter resolution with CLI > YAML > defaults priority."""
+
+    def __init__(self, config_data: Dict[str, Any]):
+        self.config_data = config_data
+
+    def resolve_model_params(self, approach: str, args) -> Dict[str, Any]:
+        """Resolve model-specific parameters."""
+        model_config = self.config_data.get('models', {}).get(approach, {})
+        eval_config = self.config_data.get('evaluation', {})
+
+        # Batch size: model-specific > global eval > CLI default
+        batch_size = (model_config.get('batch_size') or
+                     eval_config.get('batch_size') or
+                     args.batch_size)
+
+        # Max samples: CLI > config > None
+        max_samples = (args.max_samples if args.max_samples is not None else
+                      eval_config.get('max_samples'))
+
+        # Save predictions: CLI > config > True
+        save_predictions = (args.save_predictions if hasattr(args, 'save_predictions') and args.save_predictions is not None else
+                           eval_config.get('save_predictions', True))
+
+        return {
+            'batch_size': batch_size,
+            'max_samples': max_samples,
+            'save_predictions': save_predictions
+        }
+
+    def resolve_paths(self, args) -> str:
+        """Resolve test path with proper fallback logic."""
+        # CLI override takes precedence
+        if args.test_path and args.test_path != (f"data/processed/{args.technology}/test.jsonl" if not args.combined else "data/processed/test.jsonl"):
+            return args.test_path
+
+        # Config override
+        eval_config = self.config_data.get('evaluation', {})
+        config_path = eval_config.get('test_path')
+        if config_path:
+            return config_path
+
+        # Default based on combined/technology flag
+        return "data/processed/test.jsonl" if args.combined else f"data/processed/{args.technology}/test.jsonl"
+
 def evaluate_generative(args, config_data):
     """Evaluate generative model (CodeLLaMA with LoRA)."""
     logger.info("Evaluating generative model")
-    
+
     # Get model-specific config for generative model
     model_config = config_data.get('models', {}).get('generative', {})
     use_4bit = model_config.get('use_4bit', True)
@@ -48,62 +93,40 @@ def evaluate_generative(args, config_data):
         use_4bit=use_4bit,
         max_new_tokens=max_new_tokens
     )
-    
-    # Use config values with CLI overrides - prefer model-specific settings
-    gen_model_config = config_data.get('models', {}).get('generative', {})
-    model_batch_size = gen_model_config.get('batch_size')
 
-    if model_batch_size is not None:
-        batch_size = model_batch_size
-    else:
-        batch_size = args.batch_size
-    args.batch_size = batch_size  # Update args with final value
-
-    eval_config = config_data.get('evaluation', {})
-    max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
-    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
-    args.save_predictions = save_predictions  # Update args with final value
+    # Use parameter resolver for consistent parameter handling
+    param_resolver = EvaluationParameterResolver(config_data)
+    params = param_resolver.resolve_model_params('generative', args)
 
     results = evaluator.evaluate(
         test_path=args.test_path,
-        batch_size=batch_size,
-        max_samples=max_samples,
-        save_predictions=save_predictions
+        batch_size=params['batch_size'],
+        max_samples=params['max_samples'],
+        save_predictions=params['save_predictions']
     )
-    
+
     return results
 
 def evaluate_encoder(args, config_data):
     """Evaluate encoder model (CodeBERT/CodeT5)."""
     logger.info("Evaluating encoder model")
-    
+
     evaluator = EncoderEvaluator(
         model_path=args.model_path,
         output_dir=args.output_dir
     )
-    
-    # Use config values with CLI overrides - prefer model-specific settings
-    enc_model_config = config_data.get('models', {}).get('encoder', {})
-    model_batch_size = enc_model_config.get('batch_size')
 
-    if model_batch_size is not None:
-        batch_size = model_batch_size
-    else:
-        batch_size = args.batch_size
-    args.batch_size = batch_size  # Update args with final value
+    # Use parameter resolver for consistent parameter handling
+    param_resolver = EvaluationParameterResolver(config_data)
+    params = param_resolver.resolve_model_params('encoder', args)
 
-    eval_config = config_data.get('evaluation', {})
-    max_samples = args.max_samples if args.max_samples is not None else eval_config.get('max_samples')
-    save_predictions = args.save_predictions if hasattr(args, 'save_predictions') else eval_config.get('save_predictions', True)
-    args.save_predictions = save_predictions  # Update args with final value
-    
     results = evaluator.evaluate(
         test_path=args.test_path,
-        batch_size=batch_size,
-        max_samples=max_samples,
-        save_predictions=save_predictions
+        batch_size=params['batch_size'],
+        max_samples=params['max_samples'],
+        save_predictions=params['save_predictions']
     )
-    
+
     return results
 
 def compare_models(args, config_data):
@@ -217,34 +240,17 @@ def main():
             with open(args.config, 'r') as f:
                 config_data = yaml.safe_load(f) or {}
     
-    # Set default test path based on combined flag or technology
-    if args.test_path is None:
-        if args.combined:
-            args.test_path = "data/processed/test.jsonl"
-        else:
-            args.test_path = f"data/processed/{args.technology}/test.jsonl"
+    # Use parameter resolver for consistent parameter handling
+    param_resolver = EvaluationParameterResolver(config_data)
 
-    # Apply config defaults where CLI args not provided
-    eval_config = config_data.get('evaluation', {})
+    # Resolve paths
+    args.test_path = param_resolver.resolve_paths(args)
 
+    # Set output directory
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        eval_config = config_data.get('evaluation', {})
         args.output_dir = eval_config.get("output_dir", f"results/evaluation_{timestamp}")
-
-    default_test_path = "data/processed/test.jsonl" if args.combined else f"data/processed/{args.technology}/test.jsonl"
-    if args.test_path == default_test_path:  # Default value
-        args.test_path = eval_config.get("test_path", args.test_path)
-
-    # Apply global config values (model-specific settings will override these later)
-    if 'batch_size' in eval_config:
-        args.batch_size = eval_config["batch_size"]
-
-    if args.max_samples is None:
-        args.max_samples = eval_config.get("max_samples")
-
-    # Add missing arguments from config - always apply config values when available
-    if 'save_predictions' in eval_config:
-        args.save_predictions = eval_config['save_predictions']
     
     # Set model paths from config if not provided via CLI
     if args.approach != "compare" and not args.model_path:

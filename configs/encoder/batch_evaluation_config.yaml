@@ -13,4 +13,4 @@ encoder_evaluation:
 
 # Data configuration
 data:
-  test_path: "data/processed/chef_test.jsonl"
+  test_path: "data/processed/test.jsonl"

@@ -8,7 +8,7 @@ evaluation:
   save_predictions: true
 
   # Data configuration
-  test_path: "data/processed/chef_test.jsonl"
+  test_path: "data/processed/test.jsonl"
   output_dir: "results/experiments/evaluation"
 
   # Metrics to compute
@@ -26,7 +26,7 @@ models:
     path: "models/generative_latest"
     batch_size: 1 # Smaller batch size for large generative models
     use_4bit: true
-    max_new_tokens: 10
+    max_new_tokens: 50 # Increased for JSON response generation
   encoder:
     path: "models/encoder_latest"
     batch_size: 8 # Larger batch size for smaller encoder models

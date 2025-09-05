@@ -81,7 +81,7 @@ echo "🚀 Evaluating encoder model..."
 srun --unbuffered python scripts/evaluate_models.py \
     --approach encoder \
     --config ${CONFIG_FILE} \
-    --test-path ${DATA_CACHE}/chef_test.jsonl \
+    --test-path ${DATA_CACHE}/test.jsonl \
     --output-dir ${RESULTS_CACHE}/encoder_eval 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
 
 EVAL_EXIT_CODE=$?
