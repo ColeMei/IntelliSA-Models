@@ -174,12 +174,12 @@ class IacDetectionDataset(Dataset):
         # Use CodeLlama's instruction format
         full_text = f"<s>[INST] {instruction} [/INST] {response}</s>"
 
-        # Tokenize the full conversation
+        # Tokenize the full conversation with padding
         full_encoding = self.tokenizer(
             full_text,
             truncation=True,
             max_length=self.max_length,
-            padding=False,  # Let the data collator handle padding
+            padding='max_length',  # Pad to max_length
             return_tensors='pt'
         )
 
@@ -195,40 +195,17 @@ class IacDetectionDataset(Dataset):
 
         # Create labels for training - only compute loss on response tokens
         labels = full_encoding['input_ids'].clone()
-        instruction_length = instruction_encoding['input_ids'].shape[1]
+        instruction_length = min(instruction_encoding['input_ids'].shape[1], labels.shape[1])
 
-        # Ensure labels has same length as input_ids
-        if labels.shape[1] != full_encoding['input_ids'].shape[1]:
-            # Truncate or pad labels to match input_ids length
-            target_length = full_encoding['input_ids'].shape[1]
-            if labels.shape[1] > target_length:
-                labels = labels[:, :target_length]
-            else:
-                # Pad with -100
-                padding = torch.full((1, target_length - labels.shape[1]), -100)
-                labels = torch.cat([labels, padding], dim=1)
-
-        # Mask instruction tokens (set to -100 so they're ignored in loss computation)
-        labels[:, :min(instruction_length, labels.shape[1])] = -100
-
-        # Ensure all tensors are 1D and have the same length
-        input_ids = full_encoding['input_ids'].squeeze()
-        attention_mask = full_encoding['attention_mask'].squeeze()
-        labels = labels.squeeze()
-
-        # Ensure labels has the same length as input_ids
-        if len(labels) != len(input_ids):
-            if len(labels) > len(input_ids):
-                labels = labels[:len(input_ids)]
-            else:
-                # Pad with -100
-                padding = torch.full((len(input_ids) - len(labels),), -100)
-                labels = torch.cat([labels, padding])
+        # Mask instruction tokens and padding tokens (set to -100 so they're ignored in loss computation)
+        labels[:, :instruction_length] = -100
+        # Also mask padding tokens
+        labels[full_encoding['input_ids'] == self.tokenizer.pad_token_id] = -100
 
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'labels': labels
+            'input_ids': full_encoding['input_ids'].squeeze(),
+            'attention_mask': full_encoding['attention_mask'].squeeze(),
+            'labels': labels.squeeze()
         }
 
 class GenerativeTrainer:
