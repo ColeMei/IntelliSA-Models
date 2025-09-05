@@ -211,10 +211,24 @@ class IacDetectionDataset(Dataset):
         # Mask instruction tokens (set to -100 so they're ignored in loss computation)
         labels[:, :min(instruction_length, labels.shape[1])] = -100
 
+        # Ensure all tensors are 1D and have the same length
+        input_ids = full_encoding['input_ids'].squeeze()
+        attention_mask = full_encoding['attention_mask'].squeeze()
+        labels = labels.squeeze()
+
+        # Ensure labels has the same length as input_ids
+        if len(labels) != len(input_ids):
+            if len(labels) > len(input_ids):
+                labels = labels[:len(input_ids)]
+            else:
+                # Pad with -100
+                padding = torch.full((len(input_ids) - len(labels),), -100)
+                labels = torch.cat([labels, padding])
+
         return {
-            'input_ids': full_encoding['input_ids'].squeeze(),
-            'attention_mask': full_encoding['attention_mask'].squeeze(),
-            'labels': labels.squeeze()
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
         }
 
 class GenerativeTrainer:
@@ -317,7 +331,8 @@ class GenerativeTrainer:
             data_collator=DataCollatorForLanguageModeling(
                 tokenizer=self.tokenizer,
                 mlm=False,
-                pad_to_multiple_of=8
+                pad_to_multiple_of=8,
+                return_tensors="pt"
             ),
         )
         
