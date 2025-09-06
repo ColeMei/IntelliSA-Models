@@ -25,24 +25,39 @@ python --version
 nvidia-smi
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
 
-# Get arguments: config file and destination directory
-CONFIG_FILE="$1"
+# Get arguments: model path, destination directory, batch size, and test set path
+MODEL_PATH="$1"
 DEST_DIR="$2"
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "❌ No config file provided! Usage: sbatch batch_evaluate_models.slurm <config_file> <dest_dir>"
+BATCH_SIZE="$3"
+TEST_PATH="$4"
+
+if [[ -z "$MODEL_PATH" ]]; then
+    echo "❌ No model path provided! Usage: sbatch batch_evaluate_models.slurm <model_path> <dest_dir> <batch_size> <test_path>"
     exit 1
 fi
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "❌ Config file not found: $CONFIG_FILE"
+if [[ ! -d "$MODEL_PATH" ]]; then
+    echo "❌ Model directory not found: $MODEL_PATH"
     exit 1
 fi
 if [[ -z "$DEST_DIR" ]]; then
-    echo "❌ No destination directory provided! Usage: sbatch batch_evaluate_models.slurm <config_file> <dest_dir>"
+    echo "❌ No destination directory provided! Usage: sbatch batch_evaluate_models.slurm <model_path> <dest_dir> <batch_size> <test_path>"
+    exit 1
+fi
+if [[ -z "$BATCH_SIZE" ]]; then
+    BATCH_SIZE=8  # Default batch size
+fi
+if [[ -z "$TEST_PATH" ]]; then
+    TEST_PATH="data/processed/test.jsonl"  # Default test path
+fi
+if [[ ! -f "$TEST_PATH" ]]; then
+    echo "❌ Test file not found: $TEST_PATH"
     exit 1
 fi
 
-echo "📋 Using config file: $CONFIG_FILE"
+echo "🤖 Model path: $MODEL_PATH"
 echo "📁 Destination directory: $DEST_DIR"
+echo "🔢 Batch size: $BATCH_SIZE"
+echo "📋 Test set: $TEST_PATH"
 
 # Set up fast local storage structure
 echo "🗂️ Setting up fast local storage structure..."
@@ -60,10 +75,10 @@ mkdir -p ${TEMP_LOGS}
 
 # Copy test data to fast local storage
 echo "📋 Staging test data to fast local storage..."
-cp -r ${PROJECT_ROOT}/data/processed/test.jsonl ${DATA_CACHE}/
+cp -r ${TEST_PATH} ${DATA_CACHE}/test_data.jsonl
 
 # Verify test data exists
-if [[ ! -f "${DATA_CACHE}/test.jsonl" ]]; then
+if [[ ! -f "${DATA_CACHE}/test_data.jsonl" ]]; then
     echo "❌ Test data not found on fast storage! Exiting..."
     exit 1
 fi
@@ -76,13 +91,18 @@ export TOKENIZERS_PARALLELISM=false
 
 cd ${PROJECT_ROOT}
 
-# Run encoder evaluation only
+# Run encoder evaluation with direct parameters
 echo "🚀 Evaluating encoder model..."
+MODEL_NAME=$(basename "$MODEL_PATH")
+echo "📊 Evaluating model: $MODEL_NAME"
+
 srun --unbuffered python scripts/evaluate_models.py \
     --approach encoder \
-    --config ${CONFIG_FILE} \
-    --test-path ${DATA_CACHE}/test.jsonl \
-    --output-dir ${RESULTS_CACHE}/encoder_eval 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
+    --model-path ${MODEL_PATH} \
+    --test-path ${DATA_CACHE}/test_data.jsonl \
+    --output-dir ${RESULTS_CACHE}/encoder_eval \
+    --batch-size ${BATCH_SIZE} \
+    --save-predictions 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
 
 EVAL_EXIT_CODE=$?
 if [ $EVAL_EXIT_CODE -ne 0 ]; then
@@ -106,21 +126,26 @@ echo "  Results destination: ${PERMANENT_RESULTS_DIR}"
 mkdir -p ${PERMANENT_RESULTS_DIR}
 mkdir -p ${EVALUATION_LOGS_DIR}
 
-# Copy all results to permanent storage (keeps encoder_eval/ subdir)
+# Copy all results to permanent storage
 cp -r ${RESULTS_CACHE}/* ${PERMANENT_RESULTS_DIR}/
 
-# Copy the exact config used into encoder_eval/ for provenance
-mkdir -p ${PERMANENT_RESULTS_DIR}/encoder_eval
-cp ${CONFIG_FILE} ${PERMANENT_RESULTS_DIR}/encoder_eval/eval_config.yaml 2>/dev/null || true
+# Copy logs and metadata
 cp ${TEMP_LOGS}/* ${PERMANENT_RESULTS_DIR}/ 2>/dev/null || true
-
-# Copy logs to evaluation logs directory
 cp ${TEMP_LOGS}/* ${EVALUATION_LOGS_DIR}/ 2>/dev/null || true
 
-# Skip creating the batch_evaluation_latest symlink per user preference
+# Save evaluation metadata
+cat > ${PERMANENT_RESULTS_DIR}/evaluation_metadata.json << EOF
+{
+  "model_path": "$MODEL_PATH",
+  "model_name": "$MODEL_NAME",
+  "batch_size": "$BATCH_SIZE",
+  "job_id": "$SLURM_JOB_ID",
+  "timestamp": "$(date -Iseconds)",
+  "evaluation_type": "batch_encoder"
+}
+EOF
 
 echo "✅ Results copied successfully!"
-echo "  Latest results: ${PROJECT_ROOT}/results/experiments/evaluation/batch_evaluation_latest -> $(basename ${PERMANENT_RESULTS_DIR})"
 
 # Display storage usage summary
 echo "📊 Storage usage summary:"
@@ -129,25 +154,34 @@ echo "  Final results size: $(du -sh ${PERMANENT_RESULTS_DIR} | cut -f1)"
 
 # Display encoder results if available
 echo "📈 Encoder Results Summary:"
-if [[ -f "${PERMANENT_RESULTS_DIR}/encoder_eval/evaluation_results.json" ]]; then
-    echo "  Encoder Model Results:"
+RESULTS_FILE="${PERMANENT_RESULTS_DIR}/encoder_eval/evaluation_results.json"
+if [[ -f "$RESULTS_FILE" ]]; then
+    echo "  📊 Model: $MODEL_NAME"
     python -c "
 import json
-with open('${PERMANENT_RESULTS_DIR}/encoder_eval/evaluation_results.json', 'r') as f:
-    data = json.load(f)
-    metrics = data.get('metrics', {})
-    print(f'    Accuracy: {metrics.get(\"accuracy\", 0):.4f}')
-    print(f'    F1-Score: {metrics.get(\"f1\", 0):.4f}')
-    print(f'    Precision: {metrics.get(\"precision\", 0):.4f}')
-    print(f'    Recall: {metrics.get(\"recall\", 0):.4f}')
+try:
+    with open('$RESULTS_FILE', 'r') as f:
+        data = json.load(f)
+        metrics = data.get('metrics', {})
+        print(f'    Accuracy: {metrics.get(\"accuracy\", 0):.4f}')
+        print(f'    F1-Score: {metrics.get(\"f1\", 0):.4f}')
+        print(f'    Precision: {metrics.get(\"precision\", 0):.4f}')
+        print(f'    Recall: {metrics.get(\"recall\", 0):.4f}')
+        print(f'    Test Samples: {data.get(\"num_samples\", 0)}')
+        print(f'    Evaluation Time: {data.get(\"evaluation_time\", 0):.2f}s')
+except Exception as e:
+    print(f'    Error parsing results: {e}')
 " 2>/dev/null || echo "    Results file found but could not parse"
+else
+    echo "  ⚠️  Results file not found at: $RESULTS_FILE"
 fi
 
 echo "========================================="
 echo "✅ Batch Model Evaluation Completed Successfully!"
-echo "End Time: $(date)"
-echo "Job Duration: $((SECONDS / 60)) minutes"
-echo "Results saved to: ${PERMANENT_RESULTS_DIR}"
+echo "📊 Model: $MODEL_NAME"
+echo "🔢 Batch Size: $BATCH_SIZE"
+echo "⏱️  Job Duration: $((SECONDS / 60)) minutes"
+echo "💾 Results saved to: ${PERMANENT_RESULTS_DIR}"
 echo "========================================="
 
 # Note: Evaluation config files are now stored under ${PROJECT_ROOT}/logs/batch_eval_configs for reproducibility
