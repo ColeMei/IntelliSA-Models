@@ -26,12 +26,44 @@ except ImportError:
             self.approach = approach
             self.config_data = config_data
 
+            # Approach-specific defaults (same as in train_models.py)
+            self.approach_defaults = {
+                "generative": {
+                    "batch_size": 1,
+                    "num_epochs": 3,
+                    "warmup_steps": 100,
+                    "save_steps": 100,
+                    "eval_steps": 50,
+                    "gradient_accumulation_steps": 4,
+                    "weight_decay": 0.01,
+                },
+                "encoder": {
+                    "batch_size": 8,
+                    "num_epochs": 3,
+                    "warmup_steps": 100,
+                    "save_steps": 100,
+                    "eval_steps": 50,
+                    "weight_decay": 0.01,
+                },
+            }
+
         def resolve(self, param_name: str, cli_value: Any, parser_default: Any) -> Any:
+            """Resolve parameter value using priority: CLI > YAML > approach default > parser default."""
+            # If CLI value differs from parser default, use CLI value
             if cli_value != parser_default:
                 return cli_value
+
+            # Try YAML config
             yaml_value = self.config_data.get(param_name)
             if yaml_value is not None:
                 return yaml_value
+
+            # Try approach default
+            approach_defaults = self.approach_defaults.get(self.approach, {})
+            if param_name in approach_defaults:
+                return approach_defaults[param_name]
+
+            # Fall back to parser default
             return parser_default
 
 logging.basicConfig(level=logging.INFO)

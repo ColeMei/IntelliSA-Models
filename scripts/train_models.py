@@ -295,11 +295,11 @@ def main():
     # Standardize parameter resolution: CLI > YAML > approach defaults > parser defaults
     param_resolver = ParameterResolver(args.approach, config_data)
 
-    args.batch_size = param_resolver.resolve("batch_size", getattr(args, "batch_size"), 8)
-    args.num_epochs = param_resolver.resolve("num_epochs", getattr(args, "num_epochs"), 3)
-    args.warmup_steps = param_resolver.resolve("warmup_steps", getattr(args, "warmup_steps"), 100)
-    args.save_steps = param_resolver.resolve("save_steps", getattr(args, "save_steps"), 100)
-    args.eval_steps = param_resolver.resolve("eval_steps", getattr(args, "eval_steps"), 50)
+    args.batch_size = param_resolver.resolve("batch_size", getattr(args, "batch_size"), 2)
+    args.num_epochs = param_resolver.resolve("num_epochs", getattr(args, "num_epochs"), 2)
+    args.warmup_steps = param_resolver.resolve("warmup_steps", getattr(args, "warmup_steps"), 10)
+    args.save_steps = param_resolver.resolve("save_steps", getattr(args, "save_steps"), 50)
+    args.eval_steps = param_resolver.resolve("eval_steps", getattr(args, "eval_steps"), 25)
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
