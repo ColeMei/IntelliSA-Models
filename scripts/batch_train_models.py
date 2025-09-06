@@ -15,6 +15,25 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
+# Import ParameterResolver from individual training for consistent parameter resolution
+sys.path.append(str(Path(__file__).parent.parent))
+try:
+    from scripts.train_models import ParameterResolver
+except ImportError:
+    # Fallback if import fails
+    class ParameterResolver:
+        def __init__(self, approach: str, config_data: Dict[str, Any]):
+            self.approach = approach
+            self.config_data = config_data
+
+        def resolve(self, param_name: str, cli_value: Any, parser_default: Any) -> Any:
+            if cli_value != parser_default:
+                return cli_value
+            yaml_value = self.config_data.get(param_name)
+            if yaml_value is not None:
+                return yaml_value
+            return parser_default
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,14 +53,14 @@ class BatchTrainer:
         """Generate all experiment combinations from config."""
         experiments = []
         global_config = self.config.get('global', {})
-        
+
         # Generate experiments from the config
         exp_configs = self.config.get('experiments', {})
         for exp_name, exp_config in exp_configs.items():
             experiments.extend(self._generate_experiment_combinations(
                 exp_name, exp_config, global_config
             ))
-        
+
         return experiments
     
     def _generate_experiment_combinations(self, exp_name: str, exp_config: Dict,
@@ -99,8 +118,8 @@ class BatchTrainer:
         experiment = {
             'name': exp_name,
             'model_name': exp_config['model_name'],
-            **param_dict,
-            **global_config
+            **global_config,  # Global defaults first
+            **param_dict      # Swept parameters override defaults
         }
 
         # Add optional parameters if provided
@@ -120,7 +139,7 @@ class BatchTrainer:
         return experiment
     
     def create_experiment_config(self, experiment: Dict[str, Any], output_dir: Path) -> Path:
-        """Create individual config file for experiment."""
+        """Create individual config file for experiment using consistent parameter resolution."""
         # Format experiment name with hyperparameters
         exp_name_parts = [
             experiment['name'],
@@ -137,27 +156,53 @@ class BatchTrainer:
 
         exp_name = "_".join(exp_name_parts)
 
+        # Use ParameterResolver for consistent parameter resolution (CLI > YAML > approach defaults > parser defaults)
+        param_resolver = ParameterResolver('encoder', experiment)
+
+        # Define parser defaults (matching individual training)
+        parser_defaults = {
+            'batch_size': 8,
+            'num_epochs': 3,
+            'warmup_steps': 100,
+            'save_steps': 100,
+            'eval_steps': 50,
+            'weight_decay': 0.01,
+            'gradient_accumulation_steps': 1,
+            'fp16': True,
+            'dataloader_pin_memory': True
+        }
+
+        # Resolve parameters using the same logic as individual training
+        resolved_batch_size = param_resolver.resolve('batch_size', experiment.get('batch_size', parser_defaults['batch_size']), parser_defaults['batch_size'])
+        resolved_num_epochs = param_resolver.resolve('num_epochs', experiment.get('num_epochs', parser_defaults['num_epochs']), parser_defaults['num_epochs'])
+        resolved_warmup_steps = param_resolver.resolve('warmup_steps', experiment.get('warmup_steps', parser_defaults['warmup_steps']), parser_defaults['warmup_steps'])
+        resolved_save_steps = param_resolver.resolve('save_steps', experiment.get('save_steps', parser_defaults['save_steps']), parser_defaults['save_steps'])
+        resolved_eval_steps = param_resolver.resolve('eval_steps', experiment.get('eval_steps', parser_defaults['eval_steps']), parser_defaults['eval_steps'])
+        resolved_weight_decay = param_resolver.resolve('weight_decay', experiment.get('weight_decay', parser_defaults['weight_decay']), parser_defaults['weight_decay'])
+        resolved_fp16 = param_resolver.resolve('fp16', experiment.get('fp16', parser_defaults['fp16']), parser_defaults['fp16'])
+        resolved_pin_memory = param_resolver.resolve('dataloader_pin_memory', experiment.get('dataloader_pin_memory', parser_defaults['dataloader_pin_memory']), parser_defaults['dataloader_pin_memory'])
+
         config_content = {
             'model_name': experiment['model_name'],
-            'max_length': experiment['max_length'],
-            'batch_size': experiment['batch_size'],
-            'learning_rate': experiment['learning_rate'],
-            'num_epochs': experiment['num_epochs'],
-            'weight_decay': experiment.get('weight_decay', 0.01),
-            'warmup_steps': experiment.get('warmup_steps', int(experiment['warmup_ratio'] * experiment['num_epochs'] * 100)),  # Estimate warmup_steps
-            'eval_steps': experiment['eval_steps'],
-            'save_steps': experiment['save_steps'],
+            'max_length': experiment.get('max_length', 256),  # Default to 256 if not specified
+            'batch_size': resolved_batch_size,
+            'learning_rate': experiment['learning_rate'],  # CLI override has highest priority
+            'num_epochs': resolved_num_epochs,
+            'weight_decay': resolved_weight_decay,
+            'warmup_steps': resolved_warmup_steps,
+            'eval_steps': resolved_eval_steps,
+            'save_steps': resolved_save_steps,
             'train_path': experiment['train_path'],
             'val_path': experiment['val_path'],
             'output_dir': str(output_dir),
-            'evaluation_strategy': experiment['evaluation_strategy'],
-            'save_strategy': experiment['save_strategy'],
-            'logging_steps': experiment['logging_steps'],
-            'load_best_model_at_end': experiment['load_best_model_at_end'],
-            'metric_for_best_model': experiment['metric_for_best_model'],
-            'greater_is_better': experiment['greater_is_better'],
-            'fp16': experiment['fp16'],
-            'dataloader_pin_memory': experiment['dataloader_pin_memory']
+            'evaluation_strategy': experiment.get('evaluation_strategy', 'steps'),
+            'save_strategy': experiment.get('save_strategy', 'steps'),
+            'logging_steps': experiment.get('logging_steps', 10),
+            'load_best_model_at_end': experiment.get('load_best_model_at_end', True),
+            'metric_for_best_model': experiment.get('metric_for_best_model', 'f1'),
+            'greater_is_better': experiment.get('greater_is_better', True),
+            'fp16': resolved_fp16,
+            'dataloader_pin_memory': resolved_pin_memory
         }
 
         # Add optional parameters
@@ -172,11 +217,11 @@ class BatchTrainer:
         # Build hyperparameters dict for metadata
         hyperparams = {
             'learning_rate': experiment['learning_rate'],
-            'batch_size': experiment['batch_size'],
-            'num_epochs': experiment['num_epochs']
+            'batch_size': resolved_batch_size,
+            'num_epochs': resolved_num_epochs
         }
         if 'weight_decay' in experiment:
-            hyperparams['weight_decay'] = experiment['weight_decay']
+            hyperparams['weight_decay'] = resolved_weight_decay
         if 'gradient_accumulation_steps' in experiment:
             hyperparams['gradient_accumulation_steps'] = experiment['gradient_accumulation_steps']
 
@@ -188,11 +233,11 @@ class BatchTrainer:
             'hyperparameters': hyperparams,
             'training_started': datetime.now().isoformat()
         }
-        
+
         config_path = output_dir / f"{exp_name}.yaml"
         with open(config_path, 'w') as f:
             yaml.dump(config_content, f, default_flow_style=False, sort_keys=False)
-        
+
         return config_path
     
     def submit_job(self, config_path: Path, exp_name: str, job_index: int) -> str:
