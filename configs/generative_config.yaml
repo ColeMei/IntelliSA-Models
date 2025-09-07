@@ -1,6 +1,8 @@
 # Generative Model Configuration
-model_name: "codellama/CodeLlama-34b-hf"
+model_name: "Qwen/Qwen2.5-Coder-7B"
 max_length: 512
+# Prompt formatting: "llama" or "qwen" (auto-detected from model_name if omitted)
+prompt_style: "qwen"
 batch_size: 1
 learning_rate: 5e-5
 num_epochs: 3
@@ -13,7 +15,16 @@ lora:
   r: 16
   lora_alpha: 32
   lora_dropout: 0.1
-  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+  target_modules:
+    [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj",
+    ]
 
 # Memory optimization
 use_4bit: true # Enable 4-bit quantization for memory efficiency

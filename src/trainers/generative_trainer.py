@@ -124,9 +124,10 @@ def load_model_with_retry_generative(model_name: str, use_4bit: bool, bnb_config
 class IacDetectionDataset(Dataset):
     """Dataset for IaC security smell detection classification using generative approach."""
     
-    def __init__(self, data_path: str, tokenizer, max_length: int = 512):
+    def __init__(self, data_path: str, tokenizer, max_length: int = 512, prompt_style: str = "llama"):
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.prompt_style = prompt_style
         self.data = self._load_data(data_path)
         
     def _load_data(self, data_path: str) -> List[Dict]:
@@ -149,7 +150,7 @@ class IacDetectionDataset(Dataset):
                 # TP = True Positive = vulnerability correctly identified = YES
                 # FP = False Positive = incorrectly flagged as vulnerability = NO
                 decision = "YES" if label == "TP" else "NO"
-                target_response = json.dumps({"decision": decision})
+                target_response = decision
 
                 data.append({
                     'instruction': instruction,
@@ -167,12 +168,18 @@ class IacDetectionDataset(Dataset):
     def __getitem__(self, idx):
         sample = self.data[idx]
 
-        # Format using CodeLlama instruction template
+        # Format using selected instruction template
         instruction = sample['instruction']
         response = sample['target_response']
-
-        # Use CodeLlama's instruction format
-        full_text = f"<s>[INST] {instruction} [/INST] {response}</s>"
+        
+        if self.prompt_style == "qwen":
+            # Qwen ChatML-style formatting
+            instruction_part = f"<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"
+            full_text = f"{instruction_part}{response}<|im_end|>"
+        else:
+            # Default to LLaMA-style [INST] formatting
+            instruction_part = f"<s>[INST] {instruction} [/INST] "
+            full_text = f"{instruction_part}{response}</s>"
 
         # Tokenize the full conversation with padding
         full_encoding = self.tokenizer(
@@ -184,7 +191,6 @@ class IacDetectionDataset(Dataset):
         )
 
         # Tokenize just the instruction part to find where response starts
-        instruction_part = f"<s>[INST] {instruction} [/INST] "
         instruction_encoding = self.tokenizer(
             instruction_part,
             truncation=True,
@@ -220,10 +226,16 @@ class GenerativeTrainer:
         lora_alpha: int = 32,
         lora_dropout: float = 0.1,
         lora_target_modules: Optional[List[str]] = None,
+        prompt_style: Optional[str] = None,
     ):
         self.model_name = model_name
         self.output_dir = output_dir
         self.use_4bit = use_4bit
+        # Determine prompt style
+        if prompt_style is not None:
+            self.prompt_style = prompt_style
+        else:
+            self.prompt_style = "qwen" if "qwen" in model_name.lower() else "llama"
 
         # Configure quantization for large models
         if use_4bit:
@@ -243,8 +255,8 @@ class GenerativeTrainer:
     
     def prepare_datasets(self, train_path: str, val_path: str, max_length: int = 512):
         """Prepare train and validation datasets."""
-        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer, max_length=max_length)
-        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer, max_length=max_length)
+        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer, max_length=max_length, prompt_style=self.prompt_style)
+        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer, max_length=max_length, prompt_style=self.prompt_style)
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")
@@ -346,14 +358,12 @@ class GenerativeTrainer:
             try:
                 item = self.val_dataset[i]
                 
-                # Get the instruction part by decoding and splitting
-                full_text = self.tokenizer.decode(item['input_ids'], skip_special_tokens=True)
-                
-                if '[/INST]' in full_text:
-                    instruction_part = full_text.split('[/INST]')[0] + '[/INST] '
+                # Build instruction prompt based on template and original instruction
+                original_instruction = self.val_dataset.data[i]['instruction']
+                if self.prompt_style == "qwen":
+                    instruction_part = f"<|im_start|>user\n{original_instruction}<|im_end|>\n<|im_start|>assistant\n"
                 else:
-                    # Fallback - use first half
-                    instruction_part = full_text[:len(full_text)//2]
+                    instruction_part = f"<s>[INST] {original_instruction} [/INST] "
                 
                 # Tokenize instruction
                 inputs = self.tokenizer(
@@ -380,7 +390,7 @@ class GenerativeTrainer:
                     skip_special_tokens=True
                 ).strip()
                 
-                # Parse the JSON response
+                # Extract YES/NO
                 pred_label = self._extract_decision_from_response(generated)
                 # Get true label from original data
                 true_label = 1 if self.val_dataset.data[i]['original_label'] == 'TP' else 0
@@ -423,24 +433,7 @@ class GenerativeTrainer:
     def _extract_decision_from_response(self, response: str) -> int:
         """Extract YES/NO decision from model response and convert to binary label."""
         try:
-            # Try to parse as JSON first
-            if '{' in response and '}' in response:
-                start = response.find('{')
-                end = response.find('}', start) + 1
-                json_str = response[start:end]
-                
-                # Clean up common JSON formatting issues
-                json_str = re.sub(r'([{,]\s*)(\w+):', r'\1"\2":', json_str)  # Quote keys
-                json_str = re.sub(r':\s*([^",}\s]+)([,}])', r': "\1"\2', json_str)  # Quote unquoted values
-                
-                try:
-                    parsed = json.loads(json_str)
-                    decision = parsed.get('decision', '').upper()
-                    return 1 if decision == 'YES' else 0
-                except json.JSONDecodeError:
-                    pass
-            
-            # Fallback: look for YES/NO keywords
+            # Look for YES/NO keywords
             response_upper = response.upper()
             if 'YES' in response_upper:
                 return 1
@@ -456,8 +449,11 @@ class GenerativeTrainer:
         """Make prediction on new input."""
         self.model.eval()
         
-        # Format input with CodeLlama instruction template
-        formatted_input = f"<s>[INST] {input_text} [/INST] "
+        # Format input with selected instruction template
+        if self.prompt_style == "qwen":
+            formatted_input = f"<|im_start|>user\n{input_text}<|im_end|>\n<|im_start|>assistant\n"
+        else:
+            formatted_input = f"<s>[INST] {input_text} [/INST] "
         
         inputs = self.tokenizer(
             formatted_input,

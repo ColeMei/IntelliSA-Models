@@ -93,6 +93,10 @@ def train_generative(args, config_data: Optional[Dict[str, Any]] = None):
     lora_dropout = lora_config.get("lora_dropout", 0.1)
     lora_target_modules = lora_config.get("target_modules", ["q_proj", "v_proj", "k_proj", "o_proj"])
 
+    prompt_style = None
+    if config_data:
+        prompt_style = config_data.get("prompt_style")
+
     trainer = GenerativeTrainer(
         model_name=args.model_name,
         output_dir=args.output_dir,
@@ -100,11 +104,15 @@ def train_generative(args, config_data: Optional[Dict[str, Any]] = None):
         lora_r=lora_r,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,
-        lora_target_modules=lora_target_modules
+        lora_target_modules=lora_target_modules,
+        prompt_style=prompt_style
     )
 
     # Prepare datasets
-    trainer.prepare_datasets(args.train_path, args.val_path)
+    max_length = 512
+    if config_data:
+        max_length = int(config_data.get("max_length", max_length))
+    trainer.prepare_datasets(args.train_path, args.val_path, max_length=max_length)
 
     # Train the model with all parameters
     trainer.train(
@@ -115,7 +123,13 @@ def train_generative(args, config_data: Optional[Dict[str, Any]] = None):
         save_steps=args.save_steps,
         eval_steps=args.eval_steps,
         gradient_accumulation_steps=gradient_accumulation_steps,
-        weight_decay=weight_decay
+        weight_decay=weight_decay,
+        evaluation_strategy=(config_data.get("evaluation_strategy", "steps") if config_data else "steps"),
+        save_strategy=(config_data.get("save_strategy", "steps") if config_data else "steps"),
+        logging_steps=(int(config_data.get("logging_steps", 10)) if config_data else 10),
+        load_best_model_at_end=(bool(config_data.get("load_best_model_at_end", True)) if config_data else True),
+        metric_for_best_model=(config_data.get("metric_for_best_model", "eval_loss") if config_data else "eval_loss"),
+        greater_is_better=(bool(config_data.get("greater_is_better", False)) if config_data else False)
     )
 
     logger.info(f" Generative model training completed. Model saved to {args.output_dir}")
