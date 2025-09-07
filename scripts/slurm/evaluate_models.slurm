@@ -49,6 +49,23 @@ CONFIG_FILE=${1:-"${PROJECT_ROOT}/configs/evaluation_config.yaml"}
 APPROACH=${2:-"both"}
 
 echo "🎯 Approach: ${APPROACH} | Config: ${CONFIG_FILE}"
+# Resolve CONFIG_FILE if not found
+if [ ! -f "${CONFIG_FILE}" ]; then
+    if [[ "${CONFIG_FILE}" = /* ]]; then
+        # If it's an absolute path that doesn't exist, try prefixing PROJECT_ROOT (handles '/configs/...' cases)
+        CANDIDATE="${PROJECT_ROOT}${CONFIG_FILE}"
+        if [ -f "${CANDIDATE}" ]; then
+            CONFIG_FILE="${CANDIDATE}"
+        fi
+    else
+        # Treat as relative to PROJECT_ROOT
+        CANDIDATE="${PROJECT_ROOT}/${CONFIG_FILE}"
+        if [ -f "${CANDIDATE}" ]; then
+            CONFIG_FILE="${CANDIDATE}"
+        fi
+    fi
+fi
+
 [ -f "${CONFIG_FILE}" ] || { echo "❌ Config file not found: ${CONFIG_FILE}"; exit 1; }
 cd ${PROJECT_ROOT}
 
