@@ -26,7 +26,8 @@ models:
     path: "models/generative_latest"
     batch_size: 1 # Smaller batch size for large generative models
     use_4bit: true
-    max_new_tokens: 50 # Increased for JSON response generation
+    max_new_tokens: 10
+    prompt_style: "qwen"
   encoder:
     path: "models/encoder_latest"
     batch_size: 8 # Larger batch size for smaller encoder models

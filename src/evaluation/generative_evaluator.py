@@ -22,12 +22,14 @@ class GenerativeEvaluator:
         model_path: str,
         output_dir: str,
         use_4bit: bool = True,
-        max_new_tokens: int = 50,  # Increased for JSON response
+        max_new_tokens: int = 10,
+        prompt_style: Optional[str] = None,
     ):
         self.model_path = Path(model_path)
         self.output_dir = Path(output_dir)
         self.use_4bit = use_4bit
         self.max_new_tokens = max_new_tokens
+        self.prompt_style = prompt_style
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -61,7 +63,7 @@ class GenerativeEvaluator:
             bnb_config = None
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
@@ -86,6 +88,12 @@ class GenerativeEvaluator:
         # Set to evaluation mode
         self.model.eval()
         
+        # Determine prompt style if not provided
+        if self.prompt_style is None:
+            base_lower = base_model_name.lower()
+            self.prompt_style = "qwen" if "qwen" in base_lower else "llama"
+        logger.info(f"Using prompt_style='{self.prompt_style}' for evaluation")
+
         logger.info(f"Model loaded successfully")
     
     def _load_test_data(self, test_path: str) -> List[Dict]:
@@ -100,19 +108,8 @@ class GenerativeEvaluator:
         return data
     
     def _format_instruction(self, with_prompt: str) -> str:
-        """Extract and format the instruction part from with_prompt."""
-        # The with_prompt contains the full instruction
-        # We need to extract just the instruction part and format it properly
-        if 'Return ONLY JSON:' in with_prompt:
-            # Split to get instruction part
-            parts = with_prompt.split('Return ONLY JSON:')
-            instruction = parts[0].strip()
-            # Add back the response format requirement
-            instruction += '\n\nReturn ONLY JSON: {"decision":"YES|NO"}'
-        else:
-            instruction = with_prompt
-        
-        return instruction
+        """Return the instruction (with_prompt) as-is for YES/NO answering."""
+        return with_prompt
     
     def _predict_single(self, sample: Dict, sample_id: int) -> Tuple[str, float]:
         """Make prediction on single input."""
@@ -120,8 +117,11 @@ class GenerativeEvaluator:
         raw_instruction = sample['with_prompt']
         formatted_instruction = self._format_instruction(raw_instruction)
         
-        # Use CodeLlama instruction format (matching training)
-        formatted_input = f"<s>[INST] {formatted_instruction} [/INST] "
+        # Use model-specific instruction format (matching training)
+        if self.prompt_style == "qwen":
+            formatted_input = f"<|im_start|>user\n{formatted_instruction}<|im_end|>\n<|im_start|>assistant\n"
+        else:
+            formatted_input = f"<s>[INST] {formatted_instruction} [/INST] "
         
         # Tokenize input
         inputs = self.tokenizer(
@@ -165,35 +165,7 @@ class GenerativeEvaluator:
     def _parse_response(self, generated_text: str, sample_id: int) -> str:
         """Parse model response to extract prediction."""
         try:
-            # Try to find and parse JSON in the response
-            json_pattern = r'\{[^}]*\}'
-            json_matches = re.findall(json_pattern, generated_text)
-
-            for json_str in json_matches:
-                try:
-                    # Clean up common JSON formatting issues
-                    cleaned_json = re.sub(r'([{,]\s*)(\w+):', r'\1"\2":', json_str)  # Quote keys
-                    cleaned_json = re.sub(r':\s*([^",}\s]+)([,}])', r': "\1"\2', cleaned_json)  # Quote values
-
-                    response_data = json.loads(cleaned_json)
-                    decision = response_data.get("decision", "").upper()
-
-                    # Map decision to prediction label
-                    # During training: TP -> YES, FP -> NO
-                    # During evaluation: YES -> TP, NO -> FP
-                    if decision == "YES":
-                        return "TP"
-                    elif decision == "NO":
-                        return "FP"
-                    else:
-                        if sample_id < 5:
-                            logger.info(f"Sample {sample_id}: Invalid decision '{decision}', using fallback")
-                        return "FP"
-                        
-                except json.JSONDecodeError:
-                    continue
-            
-            # Fallback: look for keywords if JSON parsing fails
+            # Look for keywords (YES/NO)
             text_upper = generated_text.upper()
             if 'YES' in text_upper or '"YES"' in text_upper:
                 return "TP"

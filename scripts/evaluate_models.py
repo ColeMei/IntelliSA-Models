@@ -86,12 +86,14 @@ def evaluate_generative(args, config_data):
     model_config = config_data.get('models', {}).get('generative', {})
     use_4bit = model_config.get('use_4bit', True)
     max_new_tokens = model_config.get('max_new_tokens', 10)
+    prompt_style = model_config.get('prompt_style')
 
     evaluator = GenerativeEvaluator(
         model_path=args.model_path,
         output_dir=args.output_dir,
         use_4bit=use_4bit,
-        max_new_tokens=max_new_tokens
+        max_new_tokens=max_new_tokens,
+        prompt_style=prompt_style
     )
 
     # Use parameter resolver for consistent parameter handling
