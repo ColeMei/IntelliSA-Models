@@ -161,12 +161,20 @@ class BatchTrainer:
         # Add model-specific settings
         if 'gradient_checkpointing' in exp_config:
             experiment['gradient_checkpointing'] = exp_config['gradient_checkpointing']
+        
+        # Add global settings that can be overridden by experiment-specific settings
+        if 'lr_scheduler_type' in global_config:
+            experiment['lr_scheduler_type'] = global_config['lr_scheduler_type']
+        if 'warmup_steps' in global_config:
+            experiment['warmup_steps'] = global_config['warmup_steps']
 
         # Add early stopping if configured
         early_stopping = self.config.get('early_stopping', {})
         if early_stopping:
             experiment['early_stopping_patience'] = early_stopping.get('patience', 3)
             experiment['early_stopping_min_delta'] = early_stopping.get('min_delta', 0.001)
+            experiment['early_stopping_metric'] = early_stopping.get('metric', 'f1')
+            experiment['early_stopping_mode'] = early_stopping.get('mode', 'max')
 
         return experiment
     
@@ -245,6 +253,15 @@ class BatchTrainer:
         if 'early_stopping_patience' in experiment:
             config_content['early_stopping_patience'] = experiment['early_stopping_patience']
             config_content['early_stopping_min_delta'] = experiment['early_stopping_min_delta']
+            config_content['early_stopping_metric'] = experiment.get('early_stopping_metric', 'f1')
+            config_content['early_stopping_mode'] = experiment.get('early_stopping_mode', 'max')
+        if 'lr_scheduler_type' in experiment:
+            config_content['lr_scheduler_type'] = experiment['lr_scheduler_type']
+        
+        # Add threshold sweep config if available
+        threshold_sweep = self.config.get('threshold_sweep', {})
+        if threshold_sweep:
+            config_content['threshold_sweep'] = threshold_sweep
 
         # Build hyperparameters dict for metadata
         hyperparams = {

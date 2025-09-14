@@ -194,6 +194,9 @@ class EncoderTrainer:
         gradient_checkpointing: bool = False,
         early_stopping_patience: int = None,
         early_stopping_min_delta: float = 0.001,
+        early_stopping_metric: str = "f1",
+        early_stopping_mode: str = "max",
+        lr_scheduler_type: str = "linear",
         fp16: bool = True,
         dataloader_pin_memory: bool = True
     ):
@@ -214,12 +217,13 @@ class EncoderTrainer:
             eval_steps=eval_steps,
             weight_decay=weight_decay,
             gradient_accumulation_steps=gradient_accumulation_steps,
+            lr_scheduler_type=lr_scheduler_type,
             eval_strategy="steps",
             save_strategy="steps",
             logging_steps=10,
             load_best_model_at_end=True,
-            metric_for_best_model="f1",
-            greater_is_better=True,
+            metric_for_best_model=early_stopping_metric,
+            greater_is_better=(early_stopping_mode == "max"),
             dataloader_pin_memory=dataloader_pin_memory,
             fp16=fp16,
             # Fix for datasets compatibility
@@ -254,6 +258,65 @@ class EncoderTrainer:
         self.tokenizer.save_pretrained(self.output_dir)
         
         logger.info(f"Model saved to {self.output_dir}")
+        
+        # Perform threshold sweep if configured
+        threshold_sweep_config = getattr(self, 'threshold_sweep_config', None)
+        if threshold_sweep_config and threshold_sweep_config.get('enabled', False):
+            self._perform_threshold_sweep(trainer, threshold_sweep_config)
+    
+    def _perform_threshold_sweep(self, trainer, threshold_config):
+        """Perform threshold sweep for optimal decision boundary."""
+        import numpy as np
+        import torch
+        
+        logger.info("Performing threshold sweep...")
+        
+        # Get predictions on validation set
+        predictions = trainer.predict(self.val_dataset)
+        logits = predictions.predictions[0] if isinstance(predictions.predictions, tuple) else predictions.predictions
+        probs = torch.softmax(torch.tensor(logits), dim=-1)[:, 1].numpy()  # Get positive class probabilities
+        
+        # Get true labels
+        true_labels = np.array([item['labels'].item() for item in self.val_dataset])
+        
+        # Sweep thresholds
+        threshold_range = threshold_config.get('range', [0.3, 0.7])
+        step = threshold_config.get('step', 0.01)
+        metric = threshold_config.get('metric', 'f1')
+        
+        thresholds = np.arange(threshold_range[0], threshold_range[1] + step, step)
+        best_threshold = 0.5
+        best_score = 0.0
+        
+        for threshold in thresholds:
+            pred_labels = (probs >= threshold).astype(int)
+            if metric == 'f1':
+                from sklearn.metrics import f1_score
+                score = f1_score(true_labels, pred_labels)
+            elif metric == 'accuracy':
+                from sklearn.metrics import accuracy_score
+                score = accuracy_score(true_labels, pred_labels)
+            else:
+                continue
+                
+            if score > best_score:
+                best_score = score
+                best_threshold = threshold
+        
+        logger.info(f"Best threshold: {best_threshold:.3f} with {metric}: {best_score:.3f}")
+        
+        # Save threshold results
+        threshold_results = {
+            'best_threshold': float(best_threshold),
+            'best_score': float(best_score),
+            'metric': metric,
+            'threshold_range': threshold_range,
+            'step': step
+        }
+        
+        import json
+        with open(Path(self.output_dir) / "threshold_sweep_results.json", 'w') as f:
+            json.dump(threshold_results, f, indent=2)
     
     def predict(self, input_text: str) -> Dict:
         """Make prediction on new input."""

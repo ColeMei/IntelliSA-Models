@@ -142,6 +142,10 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
         model_name=args.model_name,
         output_dir=args.output_dir
     )
+    
+    # Set threshold sweep config if available
+    if config_data and 'threshold_sweep' in config_data:
+        trainer.threshold_sweep_config = config_data['threshold_sweep']
 
     # Prepare datasets
     trainer.prepare_datasets(args.train_path, args.val_path)
@@ -152,6 +156,9 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
     gradient_checkpointing = False
     early_stopping_patience = None
     early_stopping_min_delta = 0.001
+    early_stopping_metric = "f1"
+    early_stopping_mode = "max"
+    lr_scheduler_type = "linear"
     fp16 = True
     dataloader_pin_memory = True
 
@@ -161,6 +168,9 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
         gradient_checkpointing = config_data.get('gradient_checkpointing', gradient_checkpointing)
         early_stopping_patience = config_data.get('early_stopping_patience', early_stopping_patience)
         early_stopping_min_delta = config_data.get('early_stopping_min_delta', early_stopping_min_delta)
+        early_stopping_metric = config_data.get('early_stopping_metric', early_stopping_metric)
+        early_stopping_mode = config_data.get('early_stopping_mode', early_stopping_mode)
+        lr_scheduler_type = config_data.get('lr_scheduler_type', lr_scheduler_type)
         fp16 = config_data.get('fp16', fp16)
         dataloader_pin_memory = config_data.get('dataloader_pin_memory', dataloader_pin_memory)
 
@@ -177,6 +187,9 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
         gradient_checkpointing=gradient_checkpointing,
         early_stopping_patience=early_stopping_patience,
         early_stopping_min_delta=early_stopping_min_delta,
+        early_stopping_metric=early_stopping_metric,
+        early_stopping_mode=early_stopping_mode,
+        lr_scheduler_type=lr_scheduler_type,
         fp16=fp16,
         dataloader_pin_memory=dataloader_pin_memory
     )
