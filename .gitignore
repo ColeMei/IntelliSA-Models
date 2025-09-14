@@ -240,6 +240,9 @@ configs/*_production.yaml
 local_config.*
 hpc_config.*
 
+# Local scripts
+hpc_sync_and_clean.sh
+
 # =============================================================================
 # Backup and Archive Files
 # =============================================================================
