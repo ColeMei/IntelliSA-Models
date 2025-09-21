@@ -2,10 +2,9 @@
 
 ## 1. Problem
 
-Infrastructure-as-Code (IaC) security analysis tools, even state-of-the-art ones like **GLITCH**, suffer from **high false positive (FP) rates** across technologies such as **Chef, Ansible, and Puppet**.
- This creates **alert fatigue**, where developers ignore or disable tools, limiting their adoption in real-world workflows.
+Infrastructure-as-Code (IaC) security analysis tools, even state-of-the-art ones like **GLITCH**, suffer from **high false positive (FP) rates** across technologies such as **Chef, Ansible, and Puppet**. This creates **alert fatigue**, where developers ignore or disable tools, limiting adoption in real workflows.
 
-------
+---
 
 ## 2. Motivation & Contribution
 
@@ -15,96 +14,105 @@ Infrastructure-as-Code (IaC) security analysis tools, even state-of-the-art ones
 
 ### Key Contribution
 
-We leverage **LLM semantic understanding** to distinguish between:
+Leverage **LLM semantic understanding** to distinguish between:
 
 - **True vulnerabilities vs. False alarms**
 - **Real secrets vs. Placeholder examples**
-- **Security-critical comments vs. General TODOs**
+- **Security‑critical comments vs. General TODOs**
 - **Actual weak crypto usage vs. Documentation mentions**
-
-This directly addresses the **alert fatigue problem**, improving the usability of IaC security analysis.
 
 ### Target Security Smells
 
-Our study focuses on categories where **contextual understanding** is essential:
-
 1. **Hard-coded secrets** – separate real secrets from placeholders
-2. **Suspicious comments** – detect security-relevant vs. general comments
+2. **Suspicious comments** – detect security‑relevant vs. general comments
 3. **Weak cryptography** – distinguish actual usage vs. documentation mentions
 4. **Insecure HTTP** – identify real communication issues vs. harmless references
 
-------
+---
 
-## 3. Stage 1: Initial Exploration
+## 3. Stage 1: Approach Exploration (Completed)
 
-### Two-Stage Detection Pipeline
+### Two‑Stage Detection Pipeline
 
-1. **Static Analysis (GLITCH)**: Comprehensive detection with high recall but low precision
-2. **LLM Post-Filter**: Intelligent filtering of static analysis results
+1. **Static Analysis (GLITCH)** for high‑recall detection
+2. **LLM Post‑Filter** to prune false positives while retaining true positives
 
-### Evaluation of Approaches
+### Approach Selection
 
-- **Pure LLM Detection**
-  - Pros: Context-aware
-  - Cons: Inconsistent recall, variable across smell categories
-- **Post-Filter LLM (Selected)**
-  - Pros: Major precision gains, strong recall retention
-  - Outcome: Demonstrated the best trade-off between precision and recall
+- **Post‑Filter LLM** favored over **Pure LLM** for better precision–recall trade‑off and operational stability.
+- **Pseudo‑labeling**: Use the post‑filter’s outputs to expand supervised data for downstream training.
 
-------
+---
 
-## 4. Stage 2: Model Training Approaches
+## 4. Stage 2: Model Training (Completed)
 
-### Dataset Setup
+### Dataset Strategy
 
-- **Training/Validation**: Custom-built dataset from IaC samples
-- **Test Set**: **Oracle dataset from GLITCH paper**, ensuring fair evaluation
-- **Strategy**: **Only combined training** — one model trained jointly on Chef, Ansible, and Puppet, then tested separately on each technology’s test set
+- **Combined training**: Train a single model jointly on Chef/Ansible/Puppet; evaluate per technology.
+- **Label source**: GLITCH detections with **LLM post‑filter pseudo‑labels**.
 
-### Encoder Approach (CodeBERT / CodeT5 / CodeT5+)
+### Modeling Tracks
 
-- Input: Raw code snippets with static analysis output
-- Task: Binary classification (TP vs. FP)
-- Architecture: Encoder + classification head
-- Training: Full fine-tuning
-- Exploration: **72 different models** tested across architectures and hyperparameters
+- **Encoder classifiers** (e.g., CodeBERT / CodeT5 / CodeT5+): binary TP/FP classification on code + signals.
+- **Generative models** (e.g., Code‑centric LLMs): prompted TP/FP decision generation.
 
-### Generative Approach (CodeLLaMA-34B / Qwen2.5-Code)
+### Current Direction
 
-- Input: Prompt with static analysis context
-- Task: Generate “TP” or “FP” label
-- Architecture: Causal LM with adapter-based tuning (LoRA)
-- Observation: Performance **lagged behind encoder models**, less consistent across categories
+- Encoder models are the primary path; **identify and lock an optimal encoder configuration** for reliability and efficiency.
 
-------
+---
 
-## 5. Stage 3: Evaluation & Comparison
+## 5. Stage 3: Evaluation & Comparison (Ongoing)
 
 ### Metrics
 
-- Precision, Recall, F1-score
-- False positive reduction rate
-- Cost-benefit analysis (fine-tuned local models vs. API-based solutions)
+- Precision, Recall, F1‑score
+- **False Positive Reduction**
+- Cost/latency (local fine‑tuned models vs. API usage)
 
-### Findings
+### Protocol
 
-- **Encoder models consistently outperform generative ones** in FP reduction and overall classification accuracy
-- Generative LLMs struggled with consistency despite large model sizes (e.g., CodeLLaMA-34B, Qwen2.5-Code)
-- Best-performing encoder configurations achieved strong precision/recall balance across all 3 test sets
+- Evaluate on **combined** and **per‑technology** test splits.
+- **Per‑smell and per‑tech threshold calibration** to balance precision with TP retention.
+- Report **aggregate** and **stratified** results.
 
-### Research Questions
-
-1. **Performance**: Do encoder-based classifiers provide more reliable FP filtering than generative reasoning?
-   - Preliminary answer: **Yes** — encoders significantly outperform generative approaches
-2. **Efficiency**: What is the optimal encoder configuration for deployment?
-   - Ongoing exploration via 72-model comparison
-
-------
+---
 
 ## 6. Expected Outcomes
 
-1. **Demonstrated FP reduction**: LLM-based filtering boosts precision without degrading recall
-2. **Open-source alternatives**: Fine-tuned encoder models rival closed APIs at lower cost
-3. **Generative baseline**: Larger models (CodeLLaMA, Qwen2.5) underperform compared to tuned encoders
-4. **Practical deployment**: Packaged GLITCH + LLM pipeline with API support
-5. **Integration**: CI/CD-ready tools for real-world developer workflows
+1. **Demonstrated FP reduction** without degrading recall.
+2. **Open model** alternative that rivals closed APIs at lower operating cost.
+3. Evidence that **encoders outperform generative baselines** for this task.
+4. **Reusable pipeline**: GLITCH → LLM post‑filter → (optional) fine‑tuned encoder.
+5. **Integration‑ready artifacts** for practical developer workflows (CLI/API).
+
+---
+
+## 7. Artifact & Deployment (Packaging)
+
+- **CLI + simple API** that consumes GLITCH outputs and returns TP/FP decisions.
+- Configurable **decision thresholds** per smell and per technology.
+- Lightweight **docs & examples** for CI/CD integration.
+
+---
+
+## 8. Risks & Limitations
+
+- **Label‑quality ceiling** from pseudo‑labels may cap achievable F1.
+- **Declarative DSL semantics**: integrity/TLS controls may reside off the target line, challenging purely local reasoning.
+- Potential **over‑anchoring** to detector rules if prompts or training signals mirror GLITCH too closely.
+
+---
+
+## 9. Future Work
+
+- **Counterfactual data** to explicitly toggle integrity/SSL and URL↔checksum coupling.
+- **Ablations & negative results** (e.g., prompt variants) to map recall–precision trade‑offs.
+- Exploration of **context linking** (tying mitigations to the exact URL/source) and limited **control‑flow cues**.
+
+---
+
+## 10. Non‑Goals (for scope clarity)
+
+- Building a new static analyzer from scratch.
+- Full program analysis beyond the local IaC change context.
