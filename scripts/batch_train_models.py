@@ -382,6 +382,12 @@ class BatchTrainer:
                 if 'gradient_accumulation_steps' in exp:
                     exp_name_parts.append(f"acc{exp['gradient_accumulation_steps']}")
 
+                # Add seed when present
+                if 'seed' in exp:
+                    exp_name_parts.append(f"seed{exp['seed']}")
+                elif 'seeds' in exp:
+                    exp_name_parts.append(f"seed{exp['seeds']}")
+
                 exp_name = "_".join(exp_name_parts)
                 logger.info(f"  {i+1}. {exp_name}")
             return []
@@ -410,6 +416,12 @@ class BatchTrainer:
             # Add gradient_accumulation_steps if it varies
             if 'gradient_accumulation_steps' in experiment:
                 exp_name_parts.append(f"acc{experiment['gradient_accumulation_steps']}")
+
+            # Add seed when present
+            if 'seed' in experiment:
+                exp_name_parts.append(f"seed{experiment['seed']}")
+            elif 'seeds' in experiment:
+                exp_name_parts.append(f"seed{experiment['seeds']}")
 
             exp_name = "_".join(exp_name_parts)
 
