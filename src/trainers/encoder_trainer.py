@@ -174,10 +174,10 @@ class EncoderTrainer:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
     
-    def prepare_datasets(self, train_path: str, val_path: str):
+    def prepare_datasets(self, train_path: str, val_path: str, max_length: int = 256):
         """Prepare train and validation datasets."""
-        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer)
-        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer)
+        self.train_dataset = IacDetectionDataset(train_path, self.tokenizer, max_length=max_length)
+        self.val_dataset = IacDetectionDataset(val_path, self.tokenizer, max_length=max_length)
         
         logger.info(f"Train samples: {len(self.train_dataset)}")
         logger.info(f"Val samples: {len(self.val_dataset)}")
@@ -187,6 +187,7 @@ class EncoderTrainer:
         batch_size: int = 4,
         learning_rate: float = 2e-5,
         num_epochs: int = 3,
+        seed: int = 42,
         warmup_steps: int = 50,
         save_steps: int = 50,
         eval_steps: int = 25,
@@ -213,6 +214,7 @@ class EncoderTrainer:
             per_device_eval_batch_size=batch_size,
             learning_rate=learning_rate,
             num_train_epochs=num_epochs,
+            seed=seed,
             warmup_steps=warmup_steps,
             save_steps=save_steps,
             eval_steps=eval_steps,

@@ -1,0 +1,33 @@
+# Evaluation config for champion encoder models
+# Separate from the general evaluation_config.yaml
+
+evaluation:
+  batch_size: 8
+  max_samples: null
+  save_predictions: true
+
+  # Test sets: combined + per-technology
+  test_sets:
+    combined: "data/processed/test.jsonl"
+    technologies:
+      chef: "data/processed/chef/chef_test.jsonl"
+      ansible: "data/processed/ansible/ansible_test.jsonl"
+      puppet: "data/processed/puppet/puppet_test.jsonl"
+
+  output_dir: "results/experiments/evaluation/champion"
+
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+models:
+  encoder:
+    path: "models/experiments/encoder/codet5p_220m_champion_latest"
+    batch_size: 8
+
+batch_evaluation:
+  job_spacing_seconds: 1

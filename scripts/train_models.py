@@ -148,7 +148,8 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
         trainer.threshold_sweep_config = config_data['threshold_sweep']
 
     # Prepare datasets
-    trainer.prepare_datasets(args.train_path, args.val_path)
+    max_length = int(config_data.get("max_length", 512)) if config_data else 512
+    trainer.prepare_datasets(args.train_path, args.val_path, max_length=max_length)
 
     # Extract additional parameters from config if available
     weight_decay = 0.01
@@ -179,6 +180,7 @@ def train_encoder(args, config_data: Optional[Dict[str, Any]] = None):
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         num_epochs=args.num_epochs,
+        seed=args.seed,
         warmup_steps=args.warmup_steps,
         save_steps=args.save_steps,
         eval_steps=args.eval_steps,
@@ -276,6 +278,12 @@ def main():
         default=25,
         help="Evaluate model every N steps"
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility"
+    )
     
     args = parser.parse_args()
 
@@ -327,6 +335,7 @@ def main():
     args.warmup_steps = param_resolver.resolve("warmup_steps", getattr(args, "warmup_steps"), 10)
     args.save_steps = param_resolver.resolve("save_steps", getattr(args, "save_steps"), 50)
     args.eval_steps = param_resolver.resolve("eval_steps", getattr(args, "eval_steps"), 25)
+    args.seed = param_resolver.resolve("seed", getattr(args, "seed"), 42)
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -355,6 +364,7 @@ def main():
         "warmup_steps": args.warmup_steps,
         "save_steps": args.save_steps,
         "eval_steps": args.eval_steps,
+        "seed": args.seed,
         "tokenizers_parallelism": os.environ.get("TOKENIZERS_PARALLELISM", None),
     }
     with open(Path(args.output_dir) / "config_used.yaml", "w") as f:

@@ -110,6 +110,9 @@ class BatchTrainer:
         optional_params = []
         if 'gradient_accumulation_steps' in hyperparams:
             optional_params.append('gradient_accumulation_steps')
+        # Optional: seeds list
+        if 'seeds' in hyperparams:
+            optional_params.append('seeds')
 
         # Generate all combinations for base parameters
         base_combinations = itertools.product(*[hyperparams[param] for param in base_params])
@@ -135,8 +138,13 @@ class BatchTrainer:
             if optional_params:
                 optional_combinations = itertools.product(*[hyperparams[param] for param in optional_params])
                 for optional_combo in optional_combinations:
-                    experiment = self._create_experiment_dict(exp_name, exp_config, global_config, param_dict,
-                                                            dict(zip(optional_params, optional_combo)))
+                    experiment = self._create_experiment_dict(
+                        exp_name,
+                        exp_config,
+                        global_config,
+                        param_dict,
+                        dict(zip(optional_params, optional_combo))
+                    )
                     experiments.append(experiment)
             else:
                 experiment = self._create_experiment_dict(exp_name, exp_config, global_config, param_dict)
@@ -193,6 +201,11 @@ class BatchTrainer:
             exp_name_parts.append(f"wd{experiment['weight_decay']}")
         if 'gradient_accumulation_steps' in experiment:
             exp_name_parts.append(f"acc{experiment['gradient_accumulation_steps']}")
+        # Append seed if present
+        if 'seeds' in experiment:
+            exp_name_parts.append(f"seed{experiment['seeds']}")
+        if 'seed' in experiment:
+            exp_name_parts.append(f"seed{experiment['seed']}")
 
         exp_name = "_".join(exp_name_parts)
 
@@ -224,7 +237,7 @@ class BatchTrainer:
 
         config_content = {
             'model_name': experiment['model_name'],
-            'max_length': experiment.get('max_length', 256),  # Default to 256 if not specified
+            'max_length': experiment.get('max_length', 512),  # Align with global default
             'batch_size': resolved_batch_size,
             'learning_rate': experiment['learning_rate'],  # CLI override has highest priority
             'num_epochs': resolved_num_epochs,
@@ -232,6 +245,7 @@ class BatchTrainer:
             'warmup_steps': resolved_warmup_steps,
             'eval_steps': resolved_eval_steps,
             'save_steps': resolved_save_steps,
+            'seed': experiment.get('seed', experiment.get('seeds', 42)),
             'train_path': experiment['train_path'],
             'val_path': experiment['val_path'],
             'output_dir': str(output_dir),
@@ -273,6 +287,8 @@ class BatchTrainer:
             hyperparams['weight_decay'] = resolved_weight_decay
         if 'gradient_accumulation_steps' in experiment:
             hyperparams['gradient_accumulation_steps'] = experiment['gradient_accumulation_steps']
+        if 'seed' in experiment or 'seeds' in experiment:
+            hyperparams['seed'] = experiment.get('seed', experiment.get('seeds'))
 
         config_content['experiment_metadata'] = {
             'name': exp_name,
