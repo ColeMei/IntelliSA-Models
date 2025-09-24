@@ -242,6 +242,7 @@ hpc_config.*
 
 # Local scripts
 hpc_sync_and_clean.sh
+hpc_sync_models_encoder.sh
 
 # =============================================================================
 # Backup and Archive Files
