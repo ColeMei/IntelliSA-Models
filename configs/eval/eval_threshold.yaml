@@ -1,0 +1,35 @@
+# Generic evaluation config (threshold-based) for Stage 3/4
+
+evaluation:
+  batch_size: 8
+  max_samples: null
+  save_predictions: true
+
+  threshold:
+    mode: file
+    # leave file empty to use per-run sweep file
+
+  test_sets:
+    combined: "data/processed/test.jsonl"
+    technologies:
+      chef: "data/processed/chef/chef_test.jsonl"
+      ansible: "data/processed/ansible/ansible_test.jsonl"
+      puppet: "data/processed/puppet/puppet_test.jsonl"
+
+  output_dir: "results/experiments/evaluation/threshold"
+
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+models:
+  encoder:
+    path: "models/experiments/encoder/_threshold_placeholder_"
+    batch_size: 8
+
+batch_evaluation:
+  job_spacing_seconds: 1

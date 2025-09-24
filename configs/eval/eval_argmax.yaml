@@ -1,16 +1,13 @@
-# Evaluation config for champion encoder models
-# Separate from the general evaluation_config.yaml
+# Generic evaluation config (argmax decision rule) for Stage 1/2
 
 evaluation:
   batch_size: 8
   max_samples: null
   save_predictions: true
-  threshold:
-    mode: file
-    file: "results/experiments/evaluation/frozen_thresholds.yaml"
-    # key will be set by test runner per dataset: combined|chef|ansible|puppet
 
-  # Test sets: combined + per-technology
+  threshold:
+    mode: argmax
+
   test_sets:
     combined: "data/processed/test.jsonl"
     technologies:
@@ -18,7 +15,7 @@ evaluation:
       ansible: "data/processed/ansible/ansible_test.jsonl"
       puppet: "data/processed/puppet/puppet_test.jsonl"
 
-  output_dir: "results/experiments/evaluation/champion"
+  output_dir: "results/experiments/evaluation/argmax"
 
   metrics:
     - accuracy
@@ -30,7 +27,7 @@ evaluation:
 
 models:
   encoder:
-    path: "models/experiments/encoder/codet5p_220m_champion_latest"
+    path: "models/experiments/encoder/_argmax_placeholder_"
     batch_size: 8
 
 batch_evaluation:
