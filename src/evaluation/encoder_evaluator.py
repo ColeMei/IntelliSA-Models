@@ -3,6 +3,8 @@ import torch
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
+import os
+import yaml
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments
 from torch.utils.data import Dataset
 import numpy as np
@@ -99,6 +101,66 @@ class EncoderEvaluator:
         logger.info(f"Loaded {len(dataset)} test samples")
         return dataset
     
+    def _resolve_threshold(self) -> Optional[float]:
+        """Resolve decision threshold from environment or files.
+
+        Supported env vars (minimal integration, defaults to argmax when unset):
+          - EVAL_THRESHOLD_MODE: 'argmax' | 'fixed' | 'file'
+          - EVAL_THRESHOLD_FIXED: float (used when mode=fixed)
+          - EVAL_THRESHOLD_FILE: path to YAML/JSON with threshold(s) (mode=file)
+          - EVAL_THRESHOLD_KEY: key within YAML for per-dataset (e.g., 'combined','chef','ansible','puppet')
+        If file is JSON with {'best_threshold': x}, use that value.
+        If file is YAML with per-tech keys, pick by key; fallback to 'combined' or first numeric.
+        """
+        mode = os.getenv("EVAL_THRESHOLD_MODE", "argmax").lower().strip()
+        if mode == "fixed":
+            try:
+                return float(os.getenv("EVAL_THRESHOLD_FIXED", ""))
+            except ValueError:
+                return None
+        if mode == "file":
+            path = os.getenv("EVAL_THRESHOLD_FILE")
+            if not path:
+                return None
+            try:
+                p = Path(path)
+                if not p.exists():
+                    return None
+                # Try JSON first
+                try:
+                    with open(p, 'r') as f:
+                        data = json.load(f)
+                    # JSON sweep file
+                    if isinstance(data, dict) and "best_threshold" in data:
+                        return float(data["best_threshold"])
+                    # JSON per-tech mapping
+                    if isinstance(data, dict):
+                        key = os.getenv("EVAL_THRESHOLD_KEY") or "combined"
+                        val = data.get(key)
+                        if isinstance(val, (int, float)):
+                            return float(val)
+                except Exception:
+                    pass
+                # Try YAML
+                try:
+                    with open(p, 'r') as f:
+                        y = yaml.safe_load(f)
+                    if isinstance(y, dict):
+                        key = os.getenv("EVAL_THRESHOLD_KEY") or "combined"
+                        val = y.get(key)
+                        if isinstance(val, (int, float)):
+                            return float(val)
+                        # Fallback: find any numeric value
+                        for v in y.values():
+                            if isinstance(v, (int, float)):
+                                return float(v)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+        # argmax or unknown
+        return None
+
     def evaluate(
         self,
         test_path: str,
@@ -151,11 +213,20 @@ class EncoderEvaluator:
             # Simple models like CodeBERT return single tensor
             logits = predictions.predictions
 
+        # Default argmax; optionally apply calibrated threshold
         y_pred = np.argmax(logits, axis=1)
         y_true = predictions.label_ids
 
         # Get prediction probabilities
         probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
+
+        # Apply threshold if configured
+        threshold_used: Optional[float] = self._resolve_threshold()
+        if threshold_used is not None:
+            try:
+                y_pred = (probs[:, 1] >= float(threshold_used)).astype(int)
+            except Exception:
+                pass
         
         # Calculate detailed metrics
         accuracy = accuracy_score(y_true, y_pred)
@@ -210,6 +281,7 @@ class EncoderEvaluator:
                 'support': int(support),
                 'eval_loss': float(eval_results.get('eval_loss', 0.0))
             },
+            'threshold_used': threshold_used,
             'confusion_matrix': {
                 'tn': int(cm[0, 0]) if cm.shape == (2, 2) else 0,
                 'fp': int(cm[0, 1]) if cm.shape == (2, 2) else 0,

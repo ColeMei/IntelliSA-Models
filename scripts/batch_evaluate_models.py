@@ -39,11 +39,17 @@ except ImportError:
             # Save predictions: config > True
             save_predictions = eval_config.get('save_predictions', True)
 
-            return {
+            params = {
                 'batch_size': batch_size,
                 'max_samples': max_samples,
                 'save_predictions': save_predictions
             }
+
+            # Threshold block (optional)
+            thr_cfg = self.config_data.get('evaluation', {}).get('threshold')
+            if isinstance(thr_cfg, dict):
+                params['threshold'] = thr_cfg
+            return params
 
         def resolve_paths(self, args) -> str:
             """Resolve test path."""
@@ -195,6 +201,18 @@ class BatchEvaluator:
         else:
             batch_size = 8  # Larger batch for smaller models
 
+        # Threshold env from config if provided
+        thr = self.batch_config.get('evaluation', {}).get('threshold', {})
+        thr_mode = thr.get('mode') if isinstance(thr, dict) else None
+        thr_file = thr.get('file') if isinstance(thr, dict) else None
+        thr_fixed = thr.get('fixed') if isinstance(thr, dict) else None
+        # Map dataset name to key for per-tech thresholds
+        thr_key = test_set_name if test_set_name in ["combined","chef","ansible","puppet"] else None
+
+        # If mode=file and no file specified, default to per-run sweep file
+        if thr_mode == 'file' and (thr_file is None or str(thr_file).strip() == ''):
+            thr_file = str(Path(model_info['path']) / 'threshold_sweep_results.json')
+
         # Submit SLURM job with parameters
         cmd = [
             "sbatch",
@@ -215,7 +233,11 @@ class BatchEvaluator:
             str(model_info['path']),  # Model path
             str(eval_dir),           # Output directory
             str(batch_size),         # Batch size
-            str(test_path)           # Test set path
+            str(test_path),          # Test set path
+            str(thr_mode or ''),     # threshold mode
+            str(thr_file or ''),     # threshold file path
+            str(thr_fixed or ''),    # fixed threshold value
+            str(thr_key or '')       # per-dataset key
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.project_root)

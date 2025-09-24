@@ -1,0 +1,41 @@
+# Stage 3 evaluation config (final sweep runs) - uses per-run threshold files
+
+evaluation:
+  batch_size: 8
+  max_samples: null
+  save_predictions: true
+  threshold:
+    mode: file
+    # file intentionally omitted; batch evaluator defaults to:
+    # models/experiments/encoder/{run}/threshold_sweep_results.json
+    # The per-dataset key (combined|chef|ansible|puppet) is set automatically.
+
+  # Test sets: combined + per-technology (consistent with other eval configs)
+  test_sets:
+    combined: "data/processed/test.jsonl"
+    technologies:
+      chef: "data/processed/chef/chef_test.jsonl"
+      ansible: "data/processed/ansible/ansible_test.jsonl"
+      puppet: "data/processed/puppet/puppet_test.jsonl"
+
+  # Output directory for Stage 3 evaluations
+  output_dir: "results/experiments/evaluation/stage3"
+
+  # Metrics to compute
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+# Encoder model configurations (will be overridden by batch evaluator)
+models:
+  encoder:
+    path: "models/experiments/encoder/_stage3_placeholder_"
+    batch_size: 8
+
+# Batch processing settings
+batch_evaluation:
+  job_spacing_seconds: 1

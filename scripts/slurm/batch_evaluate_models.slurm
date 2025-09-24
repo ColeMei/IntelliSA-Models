@@ -25,11 +25,15 @@ python --version
 nvidia-smi
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
 
-# Get arguments: model path, destination directory, batch size, and test set path
+# Get arguments: model path, destination directory, batch size, test set path, and optional threshold params
 MODEL_PATH="$1"
 DEST_DIR="$2"
 BATCH_SIZE="$3"
 TEST_PATH="$4"
+THRESHOLD_MODE="${5:-}"
+THRESHOLD_FILE="${6:-}"
+THRESHOLD_FIXED="${7:-}"
+THRESHOLD_KEY="${8:-}"
 
 if [[ -z "$MODEL_PATH" ]]; then
     echo "❌ No model path provided! Usage: sbatch batch_evaluate_models.slurm <model_path> <dest_dir> <batch_size> <test_path>"
@@ -58,6 +62,20 @@ echo "🤖 Model path: $MODEL_PATH"
 echo "📁 Destination directory: $DEST_DIR"
 echo "🔢 Batch size: $BATCH_SIZE"
 echo "📋 Test set: $TEST_PATH"
+
+# Export threshold env if provided
+if [[ -n "$THRESHOLD_MODE" ]]; then
+    export EVAL_THRESHOLD_MODE="$THRESHOLD_MODE"
+fi
+if [[ -n "$THRESHOLD_FILE" ]]; then
+    export EVAL_THRESHOLD_FILE="$THRESHOLD_FILE"
+fi
+if [[ -n "$THRESHOLD_FIXED" ]]; then
+    export EVAL_THRESHOLD_FIXED="$THRESHOLD_FIXED"
+fi
+if [[ -n "$THRESHOLD_KEY" ]]; then
+    export EVAL_THRESHOLD_KEY="$THRESHOLD_KEY"
+fi
 
 # Set up fast local storage structure
 echo "🗂️ Setting up fast local storage structure..."

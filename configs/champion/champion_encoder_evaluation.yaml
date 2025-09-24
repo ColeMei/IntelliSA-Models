@@ -5,6 +5,10 @@ evaluation:
   batch_size: 8
   max_samples: null
   save_predictions: true
+  threshold:
+    mode: file
+    file: "results/experiments/evaluation/frozen_thresholds.yaml"
+    # key will be set by test runner per dataset: combined|chef|ansible|puppet
 
   # Test sets: combined + per-technology
   test_sets:
