@@ -251,7 +251,7 @@ class BatchEvaluator:
             return None
     
     def run_batch_evaluation(self, output_dir: str = "results/experiments/evaluation",
-                           max_models: int = None, filter_pattern: str = None) -> List[str]:
+                           max_models: int = None, filter_pattern: str = None, exclude_pattern: str = None) -> List[str]:
         """Run batch evaluation of all models using SLURM on all test sets."""
         models = self.find_trained_models()
 
@@ -259,9 +259,17 @@ class BatchEvaluator:
             logger.error("No trained models found to evaluate")
             return []
 
-        # Apply filters
+        # Apply filters (support comma-separated patterns)
         if filter_pattern:
-            models = [m for m in models if filter_pattern in m['name']]
+            # Split on comma and strip whitespace
+            filter_patterns = [p.strip() for p in filter_pattern.split(',')]
+            models = [m for m in models if any(pattern in m['name'] for pattern in filter_patterns)]
+
+        # Apply exclusions (support comma-separated patterns)
+        if exclude_pattern:
+            # Split on comma and strip whitespace
+            exclude_patterns = [p.strip() for p in exclude_pattern.split(',')]
+            models = [m for m in models if not any(pattern in m['name'] for pattern in exclude_patterns)]
 
         if max_models:
             models = models[:max_models]
@@ -430,24 +438,34 @@ print('F1 Scores:', results)
 
 def main():
     parser = argparse.ArgumentParser(description="Batch evaluation of trained models using SLURM")
+    # Configuration
+    parser.add_argument("--config", default="configs/encoder/batch_evaluation_config.yaml",
+                       help="Batch evaluation configuration file")
+    
+    # Input/Output paths
     parser.add_argument("--models-dir", default="models/experiments/encoder",
                        help="Directory containing trained models")
     parser.add_argument("--output-dir", default="results/experiments/evaluation",
                        help="Output directory for evaluation results")
-    parser.add_argument("--batch-config", default="configs/encoder/batch_evaluation_config.yaml",
-                       help="Batch evaluation configuration file")
 
+    # Limits
     parser.add_argument("--max-models", type=int,
                        help="Maximum number of models to evaluate")
+    
+    # Selection
     parser.add_argument("--filter", type=str,
-                       help="Filter models by pattern (e.g., 'codebert')")
+                       help="Filter models by pattern(s) - comma-separated (e.g., 'codebert,codet5_base')")
+    parser.add_argument("--exclude", type=str,
+                       help="Exclude models matching pattern(s) - comma-separated (e.g., 'codet5_large,codet5p_770m')")
+    
+    # Execution control
     parser.add_argument("--dry-run", action="store_true",
                        help="Show models to evaluate without running")
 
     args = parser.parse_args()
 
     # Initialize evaluator
-    evaluator = BatchEvaluator(args.models_dir, args.batch_config)
+    evaluator = BatchEvaluator(args.models_dir, args.config)
     
     # Find models
     models = evaluator.find_trained_models()
@@ -456,9 +474,17 @@ def main():
         logger.error("No trained models found")
         return
     
-    # Apply filters
+    # Apply filters (support comma-separated patterns)
     if args.filter:
-        models = [m for m in models if args.filter in m['name']]
+        # Split on comma and strip whitespace
+        filter_patterns = [p.strip() for p in args.filter.split(',')]
+        models = [m for m in models if any(pattern in m['name'] for pattern in filter_patterns)]
+
+    # Apply exclusions (support comma-separated patterns)
+    if args.exclude:
+        # Split on comma and strip whitespace
+        exclude_patterns = [p.strip() for p in args.exclude.split(',')]
+        models = [m for m in models if not any(pattern in m['name'] for pattern in exclude_patterns)]
     
     if args.max_models:
         models = models[:args.max_models]
@@ -475,7 +501,8 @@ def main():
     job_ids = evaluator.run_batch_evaluation(
         output_dir=args.output_dir,
         max_models=args.max_models,
-        filter_pattern=args.filter
+        filter_pattern=args.filter,
+        exclude_pattern=args.exclude
     )
     
     # Save job IDs for tracking

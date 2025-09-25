@@ -438,16 +438,23 @@ class BatchTrainer:
 
 def main():
     parser = argparse.ArgumentParser(description="Batch training for hyperparameter sweep")
+    # Configuration
     parser.add_argument("--config", default="configs/encoder/batch_training_config.yaml", 
-                       help="Batch training config file")
-    parser.add_argument("--dry-run", action="store_true", 
-                       help="Show experiments without running")
+                       help="Batch training configuration file")
+    
+    # Limits
     parser.add_argument("--max-experiments", type=int, 
                        help="Limit number of experiments")
+    
+    # Selection
     parser.add_argument("--filter", type=str,
                        help="Filter experiments by pattern(s) - comma-separated (e.g., 'codebert,codet5_base')")
     parser.add_argument("--exclude", type=str,
-                       help="Exclude experiments matching pattern(s) - comma-separated (e.g., 'codet5_large,codet5p_2b')")
+                       help="Exclude experiments matching pattern(s) - comma-separated (e.g., 'codet5_large,codet5p_770m')")
+    
+    # Execution control
+    parser.add_argument("--dry-run", action="store_true", 
+                       help="Show experiments without running")
     
     args = parser.parse_args()
     
