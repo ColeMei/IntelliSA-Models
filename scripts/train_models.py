@@ -10,9 +10,13 @@ import argparse
 import logging
 import os
 import sys
+import random
 from pathlib import Path
 from typing import Any, Dict, Optional
 import json
+import numpy as np
+
+import torch
 
 try:
     import yaml  # type: ignore
@@ -337,6 +341,19 @@ def main():
     args.eval_steps = param_resolver.resolve("eval_steps", getattr(args, "eval_steps"), 25)
     args.seed = param_resolver.resolve("seed", getattr(args, "seed"), 42)
     
+    # Global deterministic seeding to reduce variance
+    try:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+        # Deterministic algorithms for eval stability (training may be slower)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    except Exception as _:
+        pass
+
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     

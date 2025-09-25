@@ -106,6 +106,8 @@ echo "✅ Test data staged successfully"
 # Set Python path explicitly
 export PYTHONPATH="${PROJECT_ROOT}/src:${PYTHONPATH}"
 export TOKENIZERS_PARALLELISM=false
+# Evaluation seed for determinism
+export EVAL_SEED=${EVAL_SEED:-42}
 
 cd ${PROJECT_ROOT}
 
@@ -121,6 +123,14 @@ srun --unbuffered python scripts/evaluate_models.py \
     --output-dir ${RESULTS_CACHE}/encoder_eval \
     --batch-size ${BATCH_SIZE} \
     --save-predictions 2>&1 | tee ${TEMP_LOGS}/encoder_evaluation_${SLURM_JOB_ID}.log
+
+# If threshold mode requires a file, assert it is present to lock results
+if [[ "${EVAL_THRESHOLD_MODE}" == "file" ]]; then
+    if [[ -z "${EVAL_THRESHOLD_FILE}" || ! -f "${EVAL_THRESHOLD_FILE}" ]]; then
+        echo "❌ EVAL_THRESHOLD_MODE=file requires a valid EVAL_THRESHOLD_FILE. Missing: ${EVAL_THRESHOLD_FILE}"
+        exit 2
+    fi
+fi
 
 EVAL_EXIT_CODE=$?
 if [ $EVAL_EXIT_CODE -ne 0 ]; then

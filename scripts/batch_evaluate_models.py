@@ -213,6 +213,12 @@ class BatchEvaluator:
         if thr_mode == 'file' and (thr_file is None or str(thr_file).strip() == ''):
             thr_file = str(Path(model_info['path']) / 'threshold_sweep_results.json')
 
+        # Hard-check threshold file exists when mode=file to lock Stage 3/4
+        if thr_mode == 'file':
+            if not thr_file or not Path(thr_file).exists():
+                logger.error(f"Threshold mode 'file' requires an existing file. Missing: {thr_file}")
+                return None
+
         # Submit SLURM job with parameters
         cmd = [
             "sbatch",

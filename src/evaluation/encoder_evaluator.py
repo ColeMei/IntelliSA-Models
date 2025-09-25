@@ -104,38 +104,49 @@ class EncoderEvaluator:
     def _resolve_threshold(self) -> Optional[float]:
         """Resolve decision threshold from environment or files.
 
-        Supported env vars (minimal integration, defaults to argmax when unset):
+        Supported env vars (defaults to argmax when unset):
           - EVAL_THRESHOLD_MODE: 'argmax' | 'fixed' | 'file'
           - EVAL_THRESHOLD_FIXED: float (used when mode=fixed)
           - EVAL_THRESHOLD_FILE: path to JSON with single threshold (mode=file)
-        If file is JSON with {'best_threshold': x}, use that value.
-        Single threshold used for all test sets (no per-technology mapping).
+
+        Behavior changes for locking Stage 3/4 results:
+          - When mode='file', the file MUST exist and contain a 'best_threshold' field.
+            If not, raise a RuntimeError instead of silently falling back to argmax.
+          - Single threshold is used for all test sets (no per-technology mapping).
         """
         mode = os.getenv("EVAL_THRESHOLD_MODE", "argmax").lower().strip()
         if mode == "fixed":
+            fixed_val = os.getenv("EVAL_THRESHOLD_FIXED", "")
             try:
-                return float(os.getenv("EVAL_THRESHOLD_FIXED", ""))
-            except ValueError:
-                return None
+                return float(fixed_val)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"EVAL_THRESHOLD_MODE=fixed but EVAL_THRESHOLD_FIXED is invalid: '{fixed_val}'"
+                ) from exc
         if mode == "file":
             path = os.getenv("EVAL_THRESHOLD_FILE")
-            if not path:
-                return None
+            if not path or not str(path).strip():
+                raise RuntimeError(
+                    "EVAL_THRESHOLD_MODE=file but EVAL_THRESHOLD_FILE was not provided"
+                )
+            p = Path(path)
+            if not p.exists():
+                raise RuntimeError(
+                    f"Threshold file not found at EVAL_THRESHOLD_FILE='{p}'"
+                )
+            # Load JSON threshold file (single threshold for all test sets)
             try:
-                p = Path(path)
-                if not p.exists():
-                    return None
-                # Load JSON threshold file (single threshold for all test sets)
-                try:
-                    with open(p, 'r') as f:
-                        data = json.load(f)
-                    # JSON sweep file with single threshold
-                    if isinstance(data, dict) and "best_threshold" in data:
-                        return float(data["best_threshold"])
-                except Exception:
-                    return None
-            except Exception:
-                return None
+                with open(p, 'r') as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and "best_threshold" in data:
+                    return float(data["best_threshold"])
+                raise RuntimeError(
+                    f"Threshold file '{p}' missing required 'best_threshold' field"
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to read threshold from file '{p}': {exc}"
+                ) from exc
         # argmax or unknown
         return None
 

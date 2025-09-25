@@ -1,0 +1,37 @@
+# Frozen-threshold evaluation config for Stage 4 (lock results)
+
+evaluation:
+  batch_size: 8
+  max_samples: null
+  save_predictions: true
+
+  threshold:
+    mode: file
+    # IMPORTANT: Point to the Stage 3 champion's threshold_sweep_results.json
+    # Example placeholder below — update to the actual champion path when selected
+    file: "models/experiments/encoder/codet5p_220m_champion_lr4e-5_bs8_ep6_wd0.01_acc1_seed45_20250921_222832_job15951618/threshold_sweep_results.json"
+
+  test_sets:
+    combined: "data/processed/test.jsonl"
+    technologies:
+      chef: "data/processed/chef/chef_test.jsonl"
+      ansible: "data/processed/ansible/ansible_test.jsonl"
+      puppet: "data/processed/puppet/puppet_test.jsonl"
+
+  output_dir: "results/experiments/evaluation/threshold_frozen"
+
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+models:
+  encoder:
+    path: "models/experiments/encoder/_threshold_placeholder_"
+    batch_size: 8
+
+batch_evaluation:
+  job_spacing_seconds: 1

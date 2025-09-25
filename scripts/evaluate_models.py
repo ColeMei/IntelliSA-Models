@@ -10,11 +10,15 @@ import argparse
 import logging
 import os
 import sys
+import random
 import json
 from pathlib import Path
 from typing import Any, Dict, List
 import time
 from datetime import datetime
+import numpy as np
+
+import torch
 
 try:
     import yaml  # type: ignore
@@ -112,6 +116,19 @@ def evaluate_generative(args, config_data):
 def evaluate_encoder(args, config_data):
     """Evaluate encoder model (CodeBERT/CodeT5)."""
     logger.info("Evaluating encoder model")
+
+    # Optional threshold block from config to set envs (minimal, explicit)
+    thr_cfg = (config_data.get('evaluation', {}) or {}).get('threshold') if isinstance(config_data, dict) else None
+    if isinstance(thr_cfg, dict):
+        mode = thr_cfg.get('mode')
+        if isinstance(mode, str) and mode.strip():
+            os.environ['EVAL_THRESHOLD_MODE'] = mode.strip()
+        file_path = thr_cfg.get('file')
+        if isinstance(file_path, str) and file_path.strip():
+            os.environ['EVAL_THRESHOLD_FILE'] = file_path.strip()
+        fixed_val = thr_cfg.get('fixed')
+        if fixed_val is not None:
+            os.environ['EVAL_THRESHOLD_FIXED'] = str(fixed_val)
 
     evaluator = EncoderEvaluator(
         model_path=args.model_path,
@@ -273,6 +290,20 @@ def main():
         else:
             parser.error("--model-paths is required for model comparison (not found in config)")
     
+    # Deterministic seeding for evaluation repeatability
+    seed_env = os.environ.get("EVAL_SEED")
+    try:
+        seed = int(seed_env) if seed_env is not None else 42
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    except Exception:
+        pass
+
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 

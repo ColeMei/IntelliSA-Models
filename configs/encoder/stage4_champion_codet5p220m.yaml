@@ -29,6 +29,9 @@ experiments:
       gradient_accumulation_steps: [1]
       seeds: [41, 42, 43, 44, 45]
 
+# Note: Stage 4 uses frozen threshold from the Stage 3 champion during evaluation.
+# Use configs/eval/eval_threshold_frozen.yaml for evaluation to lock results.
+
 early_stopping:
   enabled: true
   patience: 2
