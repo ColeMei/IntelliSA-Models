@@ -206,8 +206,8 @@ class BatchEvaluator:
         thr_mode = thr.get('mode') if isinstance(thr, dict) else None
         thr_file = thr.get('file') if isinstance(thr, dict) else None
         thr_fixed = thr.get('fixed') if isinstance(thr, dict) else None
-        # Map dataset name to key for per-tech thresholds
-        thr_key = test_set_name if test_set_name in ["combined","chef","ansible","puppet"] else None
+        # Use single threshold for all test sets (no per-technology mapping)
+        thr_key = None
 
         # If mode=file and no file specified, default to per-run sweep file
         if thr_mode == 'file' and (thr_file is None or str(thr_file).strip() == ''):

@@ -107,10 +107,9 @@ class EncoderEvaluator:
         Supported env vars (minimal integration, defaults to argmax when unset):
           - EVAL_THRESHOLD_MODE: 'argmax' | 'fixed' | 'file'
           - EVAL_THRESHOLD_FIXED: float (used when mode=fixed)
-          - EVAL_THRESHOLD_FILE: path to YAML/JSON with threshold(s) (mode=file)
-          - EVAL_THRESHOLD_KEY: key within YAML for per-dataset (e.g., 'combined','chef','ansible','puppet')
+          - EVAL_THRESHOLD_FILE: path to JSON with single threshold (mode=file)
         If file is JSON with {'best_threshold': x}, use that value.
-        If file is YAML with per-tech keys, pick by key; fallback to 'combined' or first numeric.
+        Single threshold used for all test sets (no per-technology mapping).
         """
         mode = os.getenv("EVAL_THRESHOLD_MODE", "argmax").lower().strip()
         if mode == "fixed":
@@ -126,34 +125,13 @@ class EncoderEvaluator:
                 p = Path(path)
                 if not p.exists():
                     return None
-                # Try JSON first
+                # Load JSON threshold file (single threshold for all test sets)
                 try:
                     with open(p, 'r') as f:
                         data = json.load(f)
-                    # JSON sweep file
+                    # JSON sweep file with single threshold
                     if isinstance(data, dict) and "best_threshold" in data:
                         return float(data["best_threshold"])
-                    # JSON per-tech mapping
-                    if isinstance(data, dict):
-                        key = os.getenv("EVAL_THRESHOLD_KEY") or "combined"
-                        val = data.get(key)
-                        if isinstance(val, (int, float)):
-                            return float(val)
-                except Exception:
-                    pass
-                # Try YAML
-                try:
-                    with open(p, 'r') as f:
-                        y = yaml.safe_load(f)
-                    if isinstance(y, dict):
-                        key = os.getenv("EVAL_THRESHOLD_KEY") or "combined"
-                        val = y.get(key)
-                        if isinstance(val, (int, float)):
-                            return float(val)
-                        # Fallback: find any numeric value
-                        for v in y.values():
-                            if isinstance(v, (int, float)):
-                                return float(v)
                 except Exception:
                     return None
             except Exception:

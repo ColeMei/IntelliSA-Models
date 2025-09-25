@@ -7,7 +7,7 @@ evaluation:
 
   threshold:
     mode: file
-    # leave file empty to use per-run sweep file
+    # Uses single threshold from per-run sweep file for all test sets
 
   test_sets:
     combined: "data/processed/test.jsonl"

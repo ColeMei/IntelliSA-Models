@@ -12,11 +12,12 @@ We use a 4-stage process. Pair each training stage with its appropriate evaluati
   - Training: `configs/encoder/stage2_batch_training_220m_770m.yaml`
   - Evaluation: `configs/eval/eval_argmax.yaml` (argmax)
 
-- Stage 3: Final focused sweep (threshold calibrated per run)
+- Stage 3: Final focused sweep (single threshold calibrated per run)
 
   - Training: `configs/encoder/stage3_final_sweep_220m.yaml`
-  - Evaluation (per-run thresholds): `configs/eval/eval_threshold.yaml` with
+  - Evaluation (single threshold): `configs/eval/eval_threshold.yaml` with
     - `threshold.mode: file` → batch job defaults to each run's `models/experiments/encoder/{run}/threshold_sweep_results.json`
+    - Single threshold used for all test sets (combined, chef, ansible, puppet)
 
 - Stage 4: Stability (multi-seed) and champion selection
   - Training: `configs/champion/stage4_champion_codet5p220m.yaml`
@@ -25,4 +26,5 @@ We use a 4-stage process. Pair each training stage with its appropriate evaluati
 Notes
 
 - Evaluator supports env-driven thresholds (argmax|fixed|file). Batch jobs export the env from the eval config.
+- Single threshold design: Training on combined data → single optimal threshold → applied to all test sets.
 - Freeze step writes `artifacts/models/champion/*` and `results/experiments/evaluation/frozen_thresholds.yaml`.
