@@ -1,113 +1,112 @@
-# Machine Learning Model Training Plan Report
+# Batch Encoder Training Pipeline
 
-## Executive Summary
+## Overview
 
-This document outlines our systematic approach to training and evaluating six different code-understanding AI models through controlled hyperparameter experimentation. Our strategy prioritizes computational resources on larger, more capable models while ensuring comprehensive coverage across all architectures.
+4-stage systematic training pipeline for encoder models to reduce false positives in IaC security analysis.
 
-## Training Strategy Overview
+## Pipeline Stages
 
-Our approach implements a **tiered experimentation strategy** that balances thoroughness with computational efficiency:
+### Stage 1: Broad Candidate Selection
+- **Models**: CodeBERT, CodeT5 (small/base), CodeT5+ (220M)
+- **Purpose**: Identify promising model families
+- **Evaluation**: Argmax decision rule
+- **Config**: `configs/encoder/stage1_batch_training.yaml`
 
-- **Small Models**: Limited hyperparameter exploration (8 experiments each)
-- **Medium Models**: Moderate exploration (12 experiments each)
-- **Large Models**: Comprehensive exploration (16 experiments each)
+### Stage 2: Focused Hyperparameter Tuning  
+- **Models**: CodeT5+ (220M, 770M) - top performers from Stage 1
+- **Purpose**: Optimize learning rates and batch sizes
+- **Evaluation**: Argmax decision rule
+- **Config**: `configs/encoder/stage2_batch_training_220m_770m.yaml`
 
-**Total Planned Experiments**: 72 individual training runs
+### Stage 3: Final Optimization with Threshold Sweep
+- **Models**: CodeT5+ (220M) - best configuration from Stage 2
+- **Purpose**: Threshold optimization + final hyperparameter tuning
+- **Evaluation**: Single threshold (optimized on validation set)
+- **Config**: `configs/encoder/stage3_final_sweep_220m.yaml`
 
-## Model Architecture Overview
+### Stage 4: Multi-Seed Stability Testing
+- **Models**: CodeT5+ (220M) - champion configuration from Stage 3
+- **Purpose**: Multi-seed stability validation
+- **Evaluation**: Single threshold (frozen from Stage 3)
+- **Config**: `configs/champion/stage4_champion_codet5p220m.yaml`
 
-| Model Category | Model Name    | Size        | Experiments | Priority Level |
-| -------------- | ------------- | ----------- | ----------- | -------------- |
-| **Small**      | CodeBERT Base | Base        | 8           | Low            |
-| **Small**      | CodeT5 Small  | Small       | 8           | Low            |
-| **Medium**     | CodeT5 Base   | Base        | 12          | Medium         |
-| **Medium**     | CodeT5p 220M  | 220M params | 12          | Medium         |
-| **Large**      | CodeT5 Large  | Large       | 16          | **High**       |
-| **Large**      | CodeT5p 770M  | 770M params | 16          | **High**       |
+## Training Commands
 
-## Hyperparameter Configuration Matrix
+```bash
+# Stage 1: Broad sweep
+python scripts/batch_train_models.py --config configs/encoder/stage1_batch_training.yaml
 
-### Small Models (CodeBERT Base, CodeT5 Small)
+# Stage 2: Focused tuning
+python scripts/batch_train_models.py --config configs/encoder/stage2_batch_training_220m_770m.yaml
 
-| Parameter              | Values            | Count | Rationale                        |
-| ---------------------- | ----------------- | ----- | -------------------------------- |
-| Learning Rate          | 2e-5, 5e-5        | 2     | Skip conservative 1e-5           |
-| Batch Size             | 16, 32            | 2     | Focus on larger batches          |
-| Epochs                 | 3, 5              | 2     | Skip resource-intensive 7 epochs |
-| Weight Decay           | 0.01              | 1     | Single optimal value             |
-| **Total Combinations** | **2 × 2 × 2 × 1** | **8** | Resource conservation            |
+# Stage 3: Final sweep with threshold optimization
+python scripts/batch_train_models.py --config configs/encoder/stage3_final_sweep_220m.yaml
 
-### Medium Models (CodeT5 Base, CodeT5p 220M)
+# Stage 4: Multi-seed champion training
+python scripts/batch_train_models.py --config configs/champion/stage4_champion_codet5p220m.yaml
+```
 
-| Parameter              | Values                | Count  | Rationale                   |
-| ---------------------- | --------------------- | ------ | --------------------------- |
-| Learning Rate          | 1e-5, 2e-5, 5e-5      | 3      | Include conservative option |
-| Batch Size             | 8, 16                 | 2      | Memory-optimized            |
-| Epochs                 | 3, 5                  | 2      | Standard duration           |
-| Weight Decay           | 0.01                  | 1      | Fixed value                 |
-| Gradient Accumulation  | 1                     | 1      | Simplified approach         |
-| **Total Combinations** | **3 × 2 × 2 × 1 × 1** | **12** | Balanced exploration        |
+## Evaluation Commands
 
-### Large Models (CodeT5 Large, CodeT5p 770M)
+```bash
+# Stage 1-2: Argmax evaluation
+python scripts/batch_evaluate_models.py --config configs/eval/eval_argmax.yaml
 
-| Parameter              | Values                | Count  | Rationale                     |
-| ---------------------- | --------------------- | ------ | ----------------------------- |
-| Learning Rate          | 1e-5, 2e-5            | 2      | Conservative for large models |
-| Batch Size             | 4, 8                  | 2      | Memory constraints            |
-| Epochs                 | 3, 5                  | 2      | Standard duration             |
-| Weight Decay           | 0.01, 0.1             | 2      | Test regularization strength  |
-| Gradient Accumulation  | 2                     | 1      | Fixed for memory efficiency   |
-| **Total Combinations** | **2 × 2 × 2 × 2 × 1** | **16** | Comprehensive search          |
+# Stage 3-4: Threshold-based evaluation
+python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold.yaml
+```
 
-## Global Training Configuration
+## Key Features
 
-| Setting                    | Value             | Purpose                           |
-| -------------------------- | ----------------- | --------------------------------- |
-| **Performance Monitoring** |                   |                                   |
-| Evaluation Strategy        | Every 100 steps   | Regular performance tracking      |
-| Logging Frequency          | Every 25 steps    | Detailed progress monitoring      |
-| Success Metric             | F1 Score          | Balanced precision/recall measure |
-| **Optimization Features**  |                   |                                   |
-| Mixed Precision (FP16)     | Enabled           | ~50% memory reduction             |
-| Memory Pinning             | Enabled           | Faster CPU-GPU data transfer      |
-| Gradient Checkpointing     | Large models only | Memory-computation trade-off      |
-| **Quality Assurance**      |                   |                                   |
-| Early Stopping Patience    | 2 evaluations     | Prevent overfitting               |
-| Minimum Improvement        | 0.001 F1 score    | Meaningful progress threshold     |
-| Best Model Selection       | Highest F1 score  | Automatic optimal model saving    |
+### Threshold Optimization (Stages 3-4)
+- **Single threshold** for all test sets (combined, chef, ansible, puppet)
+- **Validation-based optimization** using F1 score
+- **Range**: 0.3-0.7 with 0.01 step size
+- **Saved to**: `threshold_sweep_results.json` per model
 
-## Resource Management Strategy
+### Model Selection Strategy
+- **Stage 1-2**: Model family comparison
+- **Stage 3**: Hyperparameter optimization
+- **Stage 4**: Multi-seed stability (median F1 selection)
 
-### Memory Optimization Techniques
+### Resource Management
+- **Early stopping**: 2-step patience, 0.001 F1 threshold
+- **Mixed precision**: FP16 training for memory efficiency
+- **Gradient checkpointing**: Large models only
+- **Batch sizing**: Size-appropriate batches (4-32)
 
-| Technique                  | Application              | Benefit                       |
-| -------------------------- | ------------------------ | ----------------------------- |
-| **FP16 Training**          | All models               | 50% memory reduction          |
-| **Gradient Checkpointing** | Large models only        | Trade computation for memory  |
-| **Dynamic Batch Sizing**   | Size-appropriate batches | Prevent OOM errors            |
-| **Gradient Accumulation**  | Large models             | Maintain effective batch size |
+## Output Structure
 
-### Computational Efficiency Measures
+```
+models/experiments/encoder/
+├── codet5p_220m_lr2e-5_bs8_ep3_wd0.01_20250921_123456_job12345/
+│   ├── config_used.yaml
+│   ├── threshold_sweep_results.json  # Stages 3-4 only
+│   └── pytorch_model.bin
+└── ...
 
-| Feature                | Configuration                        | Impact                      |
-| ---------------------- | ------------------------------------ | --------------------------- |
-| **Early Stopping**     | 2-step patience, 0.001 threshold     | Prevents wasted computation |
-| **Strategic Sampling** | Fewer experiments for small models   | Resource prioritization     |
-| **Fixed Parameters**   | Single weight decay for small models | Reduced search space        |
+results/experiments/evaluation/
+├── codet5p_220m_lr2e-5_bs8_ep3_wd0.01_20250921_123456_job12345/
+│   ├── combined/evaluation_metadata.json
+│   ├── chef/evaluation_metadata.json
+│   ├── ansible/evaluation_metadata.json
+│   └── puppet/evaluation_metadata.json
+└── ...
+```
 
-## Expected Deliverables
+## Analysis Pipeline
 
-### Primary Outputs
+```bash
+# Stage-specific analysis
+python local/evaluation/scripts/analyze_evaluation_results.py --prefix codet5p_220m_champion_
 
-| Deliverable                     | Description                      | Timeline                   |
-| ------------------------------- | -------------------------------- | -------------------------- |
-| **Optimal Configurations**      | Best hyperparameters per model   | End of training cycle      |
-| **Performance Benchmarks**      | F1 scores across all experiments | Continuous during training |
-| **Resource Utilization Report** | GPU hours and memory usage       | Post-completion analysis   |
-| **Recommendation Matrix**       | Production deployment guidance   | Final report               |
+# Champion selection and freezing
+python local/champion_check/select_champion.py --select-only
+python local/champion_check/select_champion.py --freeze-only
+```
 
-### Success Metrics
+## Success Metrics
 
-- **Primary**: F1 Score maximization
-- **Secondary**: Training efficiency (time to convergence)
-- **Tertiary**: Resource utilization optimization
+- **Primary**: F1 score maximization
+- **Secondary**: False positive reduction rate
+- **Tertiary**: Training efficiency and resource utilization

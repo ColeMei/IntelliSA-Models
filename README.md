@@ -1,24 +1,23 @@
 # LLM-IaC-SecEval-Models
 
-**Training Pipeline for LLM-based IaC Security Evaluation Models**
+**4-Stage Training Pipeline for Encoder Models to Reduce IaC Security False Positives**
 
-This repository contains the training infrastructure for Stage 2 & Stage 3 of the LLM-IaC-SecEval research project, focusing on training and evaluating models to reduce false positives in static analysis tools.
+This repository implements a systematic training pipeline for encoder models to reduce false positives in IaC security analysis across Chef, Ansible, and Puppet.
 
 ## 🎯 Project Overview
 
 **Problem**: Static analysis tools (even SOTA like GLITCH) generate high false positives (FP) across different IaC technologies.
 
-**Solution**: Use LLM power to filter/reduce FP → making static analysis more usable across Chef, Ansible, and Puppet.
+**Solution**: Use encoder LLMs to filter/reduce FP → making static analysis more usable across Chef, Ansible, and Puppet.
 
-**Approach**: Compare two training strategies:
+**Approach**: 4-stage systematic training pipeline:
 
-- **Generative LLMs** (CodeLLaMA + LoRA): Context-aware reasoning with prompts
-- **Encoder-only LLMs** (CodeBERT/CodeT5): Efficient binary classification
+- **Stage 1**: Broad candidate selection (multiple model families)
+- **Stage 2**: Focused hyperparameter tuning (top performers)
+- **Stage 3**: Final optimization with threshold sweep
+- **Stage 4**: Multi-seed stability testing
 
-**Training Modes**: Support both combined and separate training:
-
-- **Combined Training**: One model trained on all IaC technologies together
-- **Separate Training**: Individual models per technology (Chef/Ansible/Puppet)
+**Training Strategy**: Combined training on all IaC technologies with single threshold optimization.
 
 ## 📁 Repository Structure
 
@@ -26,125 +25,111 @@ This repository contains the training infrastructure for Stage 2 & Stage 3 of th
 llm-iac-seceval-models/
 ├── src/                           # Source code
 │   ├── trainers/                  # Training implementations
-│   ├── datasets/                  # Dataset classes
 │   ├── evaluation/                # Model evaluation
 │   └── utils/                     # Utilities
-├── scripts/                       # Training and utility scripts
-│   ├── train_models.py           # Main training script
-│   ├── evaluate_models.py        # Model evaluation
-│   └── hpc/                      # HPC-specific scripts
-├── configs/                       # Model configurations
+├── scripts/                       # Training and evaluation scripts
+│   ├── batch_train_models.py     # Batch training (HPC)
+│   ├── batch_evaluate_models.py  # Batch evaluation (HPC)
+│   └── slurm/                    # SLURM job scripts
+├── configs/                       # Stage-specific configurations
+│   ├── encoder/                  # Training configs (Stage 1-4)
+│   ├── eval/                     # Evaluation configs
+│   └── champion/                 # Champion configs (Stage 4)
+├── local/                         # Local analysis scripts
+│   ├── evaluation/               # Results analysis
+│   └── champion_check/           # Champion selection
+├── docs/                          # Documentation
 ├── data/                         # Datasets (not synced)
 ├── models/                       # Trained models (not synced)
-├── logs/                         # Training logs (not synced)
 ├── results/                      # Experimental results
-├── tests/                        # Unit and integration tests
-└── environments/                 # Environment setup
+└── tests/                        # Unit tests
 ```
 
-## 🔬 Research Pipeline
+## 🔬 Training Pipeline
 
-### Stage 2: Model Training Approaches
+### Stage 1: Broad Candidate Selection
+- **Models**: CodeBERT, CodeT5 (small/base), CodeT5+ (220M)
+- **Purpose**: Identify promising model families
+- **Evaluation**: Argmax decision rule
 
-**Encoder Approach (CodeBERT)**
+### Stage 2: Focused Hyperparameter Tuning
+- **Models**: CodeT5+ (220M, 770M) - top performers
+- **Purpose**: Optimize learning rates and batch sizes
+- **Evaluation**: Argmax decision rule
 
-- Input: Raw code snippets
-- Task: Binary classification (TP/FP)
-- Architecture: Encoder + classification head
-- Training: Full fine-tuning
+### Stage 3: Final Optimization with Threshold Sweep
+- **Models**: CodeT5+ (220M) - best configuration
+- **Purpose**: Threshold optimization + final tuning
+- **Evaluation**: Single threshold (optimized on validation)
 
-**Generative Approach (CodeLLaMA)**
+### Stage 4: Multi-Seed Stability Testing
+- **Models**: CodeT5+ (220M) - champion configuration
+- **Purpose**: Multi-seed stability validation
+- **Evaluation**: Single threshold (frozen from Stage 3)
 
-- Input: Formatted prompts with context
-- Task: Generate "TP" or "FP" responses
-- Architecture: Causal LM + LoRA adapters
-- Training: Parameter-efficient fine-tuning
+## 🚀 Quick Start
 
-### Stage 3: Evaluation & Comparison
-
-- Performance metrics: Precision, Recall, F1, FP reduction rate
-- Cost-benefit analysis: Local fine-tuned vs. API calls
-- Scaling study: 7B → 13B → 32B model comparison
-
-## 🚀 Training Examples
-
-### Combined Training (Recommended)
+### Training Pipeline
 
 ```bash
-# Train one model on all technologies combined
-python scripts/train_models.py --approach encoder --combined
+# Stage 1: Broad sweep
+python scripts/batch_train_models.py --config configs/encoder/stage1_batch_training.yaml
 
-# Evaluate on each technology separately
-python scripts/evaluate_models.py --approach encoder --technology chef --model-path models/encoder
-python scripts/evaluate_models.py --approach encoder --technology ansible --model-path models/encoder
-python scripts/evaluate_models.py --approach encoder --technology puppet --model-path models/encoder
+# Stage 2: Focused tuning
+python scripts/batch_train_models.py --config configs/encoder/stage2_batch_training_220m_770m.yaml
+
+# Stage 3: Final optimization with threshold sweep
+python scripts/batch_train_models.py --config configs/encoder/stage3_final_sweep_220m.yaml
+
+# Stage 4: Multi-seed champion training
+python scripts/batch_train_models.py --config configs/champion/stage4_champion_codet5p220m.yaml
 ```
 
-### Separate Training
+### Evaluation Pipeline
 
 ```bash
-# Train separate models per technology
-python scripts/train_models.py --approach encoder --technology chef
-python scripts/train_models.py --approach encoder --technology ansible
-python scripts/train_models.py --approach encoder --technology puppet
+# Stage 1-2: Argmax evaluation
+python scripts/batch_evaluate_models.py --config configs/eval/eval_argmax.yaml
 
-# Evaluate each model on its respective technology
-python scripts/evaluate_models.py --approach encoder --technology chef --model-path models/encoder_chef
-python scripts/evaluate_models.py --approach encoder --technology ansible --model-path models/encoder_ansible
+# Stage 3-4: Threshold-based evaluation
+python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold.yaml
 ```
 
-## 📊 Model Configurations
+### Analysis Pipeline
 
-### Encoder Models
+```bash
+# Stage-specific analysis
+python local/evaluation/scripts/analyze_evaluation_results.py --prefix codet5p_220m_champion_
 
-- **CodeBERT**: `microsoft/codebert-base`
-- **CodeT5**: `Salesforce/codet5-base`
-- Max length: 256 tokens
-- Batch size: 8
-- Learning rate: 2e-5
+# Champion selection and freezing
+python local/champion_check/select_champion.py --select-only
+python local/champion_check/select_champion.py --freeze-only
+```
 
-### Generative Models
+## 📊 Key Features
 
-- **CodeLLaMA-7B**: `codellama/CodeLlama-7b-hf`
-- **CodeLLaMA-13B**: `codellama/CodeLlama-13b-hf`
-- **CodeLLaMA-34B**: `codellama/CodeLlama-34b-hf`
-- Max length: 512 tokens
-- LoRA rank: 16, alpha: 32
-- Batch size: 1-2
-- Learning rate: 5e-5
+### Single Threshold Design
+- **Training**: Combined dataset (all IaC technologies)
+- **Optimization**: Validation set threshold sweep (F1 score)
+- **Application**: Same threshold for all test sets
+- **Range**: 0.3-0.7 with 0.01 step size
 
-## 📈 Performance Monitoring
+### Model Selection Strategy
+- **Stage 1-2**: Model family comparison
+- **Stage 3**: Hyperparameter optimization
+- **Stage 4**: Multi-seed stability (median F1 selection)
 
-### Training Metrics
+### Resource Management
+- **Early stopping**: 2-step patience, 0.001 F1 threshold
+- **Mixed precision**: FP16 training for memory efficiency
+- **Gradient checkpointing**: Large models only
+- **Batch sizing**: Size-appropriate batches (4-32)
 
-- Loss curves (training/validation)
-- Accuracy, Precision, Recall, F1
-- Learning rate schedules
-- GPU memory usage
+## 📈 Success Metrics
 
-### Logging
-
-- **Local**: `logs/local/`
-- **HPC**: `logs/slurm_outputs/`
-- **TensorBoard**: Automatic logging enabled
-- **Weights & Biases**: Optional integration
-
-## 📊 Expected Results
-
-### Model Comparison Matrix
-
-| Model         | Size | Training Time | Memory Usage | F1 Score | FP Reduction |
-| ------------- | ---- | ------------- | ------------ | -------- | ------------ |
-| CodeBERT      | 125M | ~2 hours      | 16GB         | TBD      | TBD          |
-| CodeT5        | 220M | ~3 hours      | 24GB         | TBD      | TBD          |
-| CodeLLaMA-7B  | 7B   | ~8 hours      | 32GB         | TBD      | TBD          |
-| CodeLLaMA-13B | 13B  | ~16 hours     | 64GB         | TBD      | TBD          |
-| CodeLLaMA-32B | 32B  | ~36 hours     | 128GB        | TBD      | TBD          |
-
-### Research Questions
-
-1. **Performance**: Does generative reasoning outperform encoder classification?
-2. **Efficiency**: What's the optimal model size for deployment?
+- **Primary**: F1 score maximization
+- **Secondary**: False positive reduction rate
+- **Tertiary**: Training efficiency and resource utilization
 
 ## 📚 References
 
