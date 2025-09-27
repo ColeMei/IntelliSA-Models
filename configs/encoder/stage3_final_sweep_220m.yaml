@@ -1,20 +1,7 @@
 # Final sweep configuration for codet5p-220m
-# Focused hyperparameter optimization with advanced features
+# Shared defaults come from src/utils/config_defaults.py
 
 global:
-  max_length: 512
-  eval_steps: 100
-  save_steps: 200
-  evaluation_strategy: "steps"
-  save_strategy: "steps"
-  logging_steps: 25
-  load_best_model_at_end: true
-  metric_for_best_model: "f1"
-  greater_is_better: true
-  train_path: "data/processed/train.jsonl"
-  val_path: "data/processed/val.jsonl"
-  fp16: true
-  dataloader_pin_memory: true
   lr_scheduler_type: "cosine"
   warmup_steps: 500
 
@@ -44,8 +31,3 @@ threshold_sweep:
   metric: "f1"
   range: [0.3, 0.7]
   step: 0.01
-
-output:
-  base_dir: "models/experiments/encoder"
-  results_dir: "results/experiments/encoder"
-  naming_pattern: "{model}_{lr}_{bs}_{epochs}_{wd}"

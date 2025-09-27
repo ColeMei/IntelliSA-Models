@@ -66,6 +66,8 @@ except ImportError:
             # Fall back to parser default
             return parser_default
 
+from src.utils.config_defaults import apply_encoder_defaults
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,8 @@ class BatchTrainer:
     def _load_config(self) -> Dict[str, Any]:
         """Load batch training configuration."""
         with open(self.config_path, 'r') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
+        return apply_encoder_defaults(config)
     
     def generate_experiments(self) -> List[Dict[str, Any]]:
         """Generate all experiment combinations from config."""

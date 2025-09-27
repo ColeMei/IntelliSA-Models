@@ -30,6 +30,7 @@ sys.path.insert(0, str(project_root / "src"))
 # Import trainers
 from trainers.generative_trainer import GenerativeTrainer
 from trainers.encoder_trainer import EncoderTrainer
+from utils.config_defaults import apply_encoder_defaults
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -314,6 +315,8 @@ def main():
         else:
             with open(args.config, "r") as f:
                 config_data = yaml.safe_load(f) or {}
+            if args.approach == "encoder":
+                config_data = apply_encoder_defaults(config_data)
 
     # Set defaults based on approach
     if args.model_name is None:
