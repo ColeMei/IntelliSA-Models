@@ -15,58 +15,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
-# Import ParameterResolver from individual training for consistent parameter resolution
+# Ensure repo src is on path
 sys.path.append(str(Path(__file__).parent.parent))
-try:
-    from scripts.train_models import ParameterResolver
-except ImportError:
-    # Fallback if import fails
-    class ParameterResolver:
-        def __init__(self, approach: str, config_data: Dict[str, Any]):
-            self.approach = approach
-            self.config_data = config_data
-
-            # Approach-specific defaults (same as in train_models.py)
-            self.approach_defaults = {
-                "generative": {
-                    "batch_size": 1,
-                    "num_epochs": 3,
-                    "warmup_steps": 100,
-                    "save_steps": 100,
-                    "eval_steps": 50,
-                    "gradient_accumulation_steps": 4,
-                    "weight_decay": 0.01,
-                },
-                "encoder": {
-                    "batch_size": 8,
-                    "num_epochs": 3,
-                    "warmup_steps": 100,
-                    "save_steps": 100,
-                    "eval_steps": 50,
-                    "weight_decay": 0.01,
-                },
-            }
-
-        def resolve(self, param_name: str, cli_value: Any, parser_default: Any) -> Any:
-            """Resolve parameter value using priority: CLI > YAML > approach default > parser default."""
-            # If CLI value differs from parser default, use CLI value
-            if cli_value != parser_default:
-                return cli_value
-
-            # Try YAML config
-            yaml_value = self.config_data.get(param_name)
-            if yaml_value is not None:
-                return yaml_value
-
-            # Try approach default
-            approach_defaults = self.approach_defaults.get(self.approach, {})
-            if param_name in approach_defaults:
-                return approach_defaults[param_name]
-
-            # Fall back to parser default
-            return parser_default
 
 from src.utils.config_defaults import apply_encoder_defaults
+from src.utils.parameter_resolver import ParameterResolver
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
