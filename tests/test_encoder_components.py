@@ -1,11 +1,17 @@
 import json
 import os
+import sys
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from src.trainers.encoder_trainer import IacDetectionDataset, compute_metrics
 from src.utils.parameter_resolver import ParameterResolver
