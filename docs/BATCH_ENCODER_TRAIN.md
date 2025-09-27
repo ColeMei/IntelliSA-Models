@@ -72,6 +72,7 @@ python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold_fro
 - **Stage 1-2**: Model family comparison
 - **Stage 3**: Hyperparameter optimization
 - **Stage 4**: Multi-seed stability (median F1 selection)
+- **Generative path**: Initial comparisons showed generative TP/FP prompts underperform encoders, so subsequent stages focus solely on encoder sweeps.
 
 ### Resource Management
 - **Early stopping**: 2-step patience, 0.001 F1 threshold

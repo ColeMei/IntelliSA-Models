@@ -54,7 +54,7 @@ Leverage **LLM semantic understanding** to distinguish between:
 ### Modeling Tracks
 
 - **Encoder classifiers** (e.g., CodeBERT / CodeT5 / CodeT5+): binary TP/FP classification on code + signals.
-- **Generative models** (e.g., Code‑centric LLMs): prompted TP/FP decision generation.
+- **Generative models** (e.g., Code-centric LLMs): prompted TP/FP decision generation (explored in Stage 1, but deprioritized after consistently underperforming encoders on precision/F1).
 
 ### Current Direction
 
