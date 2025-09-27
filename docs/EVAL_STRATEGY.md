@@ -20,6 +20,9 @@
 - **Decision Rule**: Single threshold reused from Stage 3 champion
 - **Purpose**: Produce reproducible champion metrics without manual path edits
 - **Config**: `configs/eval/eval_threshold_frozen.yaml`
+- **Failure hint**: If the job reports a missing threshold file, re-link
+  `models/experiments/encoder/codet5p_220m_final_sweep_latest` to the Stage 3
+  run containing `threshold_sweep_results.json` as indicated in the error message
 
 ## Threshold Strategy
 

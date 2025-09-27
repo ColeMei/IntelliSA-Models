@@ -132,7 +132,12 @@ class EncoderEvaluator:
             p = Path(path)
             if not p.exists():
                 raise RuntimeError(
-                    f"Threshold file not found at EVAL_THRESHOLD_FILE='{p}'"
+                    "Threshold file not found at "
+                    f"EVAL_THRESHOLD_FILE='{p}'. "
+                    "Ensure the champion symlink "
+                    "'models/experiments/encoder/codet5p_220m_final_sweep_latest' "
+                    "points to the Stage 3 run containing "
+                    "'threshold_sweep_results.json'."
                 )
             # Load JSON threshold file (single threshold for all test sets)
             try:
@@ -141,7 +146,8 @@ class EncoderEvaluator:
                 if isinstance(data, dict) and "best_threshold" in data:
                     return float(data["best_threshold"])
                 raise RuntimeError(
-                    f"Threshold file '{p}' missing required 'best_threshold' field"
+                    f"Threshold file '{p}' missing required 'best_threshold' field. "
+                    "Regenerate Stage 3 results or re-link the champion symlink."
                 )
             except Exception as exc:
                 raise RuntimeError(

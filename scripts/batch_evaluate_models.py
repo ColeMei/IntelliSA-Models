@@ -215,8 +215,14 @@ class BatchEvaluator:
 
         # Hard-check threshold file exists when mode=file to lock Stage 3/4
         if thr_mode == 'file':
-            if not thr_file or not Path(thr_file).exists():
-                logger.error(f"Threshold mode 'file' requires an existing file. Missing: {thr_file}")
+            threshold_path = Path(thr_file) if thr_file else None
+            if threshold_path is None or not threshold_path.exists():
+                logger.error(
+                    "Threshold mode 'file' requires an existing file. "
+                    f"Missing: {thr_file}. Confirm that the champion symlink "
+                    "'models/experiments/encoder/codet5p_220m_final_sweep_latest' "
+                    "points to a Stage 3 run with 'threshold_sweep_results.json'."
+                )
                 return None
 
         # Submit SLURM job with parameters
