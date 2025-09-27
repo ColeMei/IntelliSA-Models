@@ -7,9 +7,9 @@ evaluation:
 
   threshold:
     mode: file
-    # IMPORTANT: Point to the Stage 3 champion's threshold_sweep_results.json
-    # Example placeholder below — update to the actual champion path when selected
-    file: "models/experiments/encoder/codet5p_220m_final_sweep_lr4e-5_bs8_ep6_wd0.01_acc1_20250925_174846_job16119200/threshold_sweep_results.json"
+    # Reuse the Stage 3 champion's threshold via its stable symlink.
+    # The symlink is maintained by batch_encoder_training.slurm after each run.
+    file: "models/experiments/encoder/codet5p_220m_final_sweep_latest/threshold_sweep_results.json"
 
   test_sets:
     combined: "data/processed/test.jsonl"

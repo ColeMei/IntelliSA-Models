@@ -16,6 +16,11 @@
 - **Purpose**: Final optimization and stability testing
 - **Config**: `configs/eval/eval_threshold.yaml`
 
+### Stage 4 Freeze: Champion Lock-In
+- **Decision Rule**: Single threshold reused from Stage 3 champion
+- **Purpose**: Produce reproducible champion metrics without manual path edits
+- **Config**: `configs/eval/eval_threshold_frozen.yaml`
+
 ## Threshold Strategy
 
 ### Single Threshold Design
@@ -27,6 +32,7 @@
 ### Threshold Files
 - **Training**: `threshold_sweep_results.json` per model
 - **Evaluation**: Automatic loading from model directory
+- **Champion freeze**: `codet5p_220m_final_sweep_latest/threshold_sweep_results.json` is discovered via symlink in Stage 4 frozen config
 - **Format**: `{"best_threshold": 0.45, "best_score": 0.82, "metric": "f1"}`
 
 ## Batch Evaluation Commands

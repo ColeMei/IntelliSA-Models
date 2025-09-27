@@ -28,7 +28,7 @@
 - **Models**: CodeT5+ (220M) - champion configuration from Stage 3
 - **Purpose**: Multi-seed stability validation
 - **Evaluation**: Single threshold (frozen from Stage 3)
-- **Config**: `configs/champion/stage4_champion_codet5p220m.yaml`
+- **Config**: `configs/encoder/stage4_champion_codet5p220m.yaml`
 
 ## Training Commands
 
@@ -43,7 +43,7 @@ python scripts/batch_train_models.py --config configs/encoder/stage2_batch_train
 python scripts/batch_train_models.py --config configs/encoder/stage3_final_sweep_220m.yaml
 
 # Stage 4: Multi-seed champion training
-python scripts/batch_train_models.py --config configs/champion/stage4_champion_codet5p220m.yaml
+python scripts/batch_train_models.py --config configs/encoder/stage4_champion_codet5p220m.yaml
 ```
 
 ## Evaluation Commands
@@ -54,6 +54,9 @@ python scripts/batch_evaluate_models.py --config configs/eval/eval_argmax.yaml
 
 # Stage 3-4: Threshold-based evaluation
 python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold.yaml
+
+# Stage 4 (champion freeze): Frozen-threshold evaluation
+python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold_frozen.yaml
 ```
 
 ## Key Features
@@ -63,6 +66,7 @@ python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold.yam
 - **Validation-based optimization** using F1 score
 - **Range**: 0.3-0.7 with 0.01 step size
 - **Saved to**: `threshold_sweep_results.json` per model
+- **Stage 4 freeze**: `eval_threshold_frozen.yaml` resolves the champion threshold via the `codet5p_220m_final_sweep_latest` symlink, so no manual path edits are needed
 
 ### Model Selection Strategy
 - **Stage 1-2**: Model family comparison
