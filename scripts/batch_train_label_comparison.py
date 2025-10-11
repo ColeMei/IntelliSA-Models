@@ -116,43 +116,61 @@ class LabelComparisonTrainer:
         output_dir = self.project_root / "configs" / "label_comparison" / exp_name
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Use ParameterResolver for dataset-dependent parameters
-        resolver = ParameterResolver(
-            train_path=f"{self.project_root}/data/{experiment['dataset_variant']}/train.jsonl"
-        )
+        # Use ParameterResolver for consistent parameter resolution
+        param_resolver = ParameterResolver('encoder', experiment)
+        
+        # Define parser defaults (matching individual training)
+        parser_defaults = {
+            'batch_size': 8,
+            'num_epochs': 3,
+            'weight_decay': 0.01,
+            'warmup_steps': 100,
+            'eval_steps': 100,
+            'save_steps': 100,
+            'fp16': True,
+            'dataloader_pin_memory': True
+        }
         
         # Resolve parameters
-        resolved_batch_size = resolver.resolve_param(
+        resolved_batch_size = param_resolver.resolve(
+            'batch_size',
             experiment.get('batch_size'),
-            'batch_size'
+            parser_defaults['batch_size']
         )
-        resolved_num_epochs = resolver.resolve_param(
+        resolved_num_epochs = param_resolver.resolve(
+            'num_epochs',
             experiment.get('num_epochs'),
-            'num_epochs'
+            parser_defaults['num_epochs']
         )
-        resolved_weight_decay = resolver.resolve_param(
+        resolved_weight_decay = param_resolver.resolve(
+            'weight_decay',
             experiment.get('weight_decay'),
-            'weight_decay'
+            parser_defaults['weight_decay']
         )
-        resolved_warmup_steps = resolver.resolve_param(
+        resolved_warmup_steps = param_resolver.resolve(
+            'warmup_steps',
             experiment.get('warmup_steps'),
-            'warmup_steps'
+            parser_defaults['warmup_steps']
         )
-        resolved_eval_steps = resolver.resolve_param(
+        resolved_eval_steps = param_resolver.resolve(
+            'eval_steps',
             experiment.get('eval_steps', 100),
-            'eval_steps'
+            parser_defaults['eval_steps']
         )
-        resolved_save_steps = resolver.resolve_param(
+        resolved_save_steps = param_resolver.resolve(
+            'save_steps',
             experiment.get('save_steps', 100),
-            'save_steps'
+            parser_defaults['save_steps']
         )
-        resolved_fp16 = resolver.resolve_param(
+        resolved_fp16 = param_resolver.resolve(
+            'fp16',
             experiment.get('fp16', True),
-            'fp16'
+            parser_defaults['fp16']
         )
-        resolved_pin_memory = resolver.resolve_param(
+        resolved_pin_memory = param_resolver.resolve(
+            'dataloader_pin_memory',
             experiment.get('dataloader_pin_memory', True),
-            'dataloader_pin_memory'
+            parser_defaults['dataloader_pin_memory']
         )
         
         # Build config content
