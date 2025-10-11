@@ -1,0 +1,38 @@
+# Label Comparison Experiment - Champion Configuration
+# Purpose: Train champion model (CodeT5+ 220M) with frozen hyperparameters on different label variants
+# Usage: Compare label quality impact by holding model architecture and hyperparameters constant
+
+global:
+  lr_scheduler_type: "cosine"
+  warmup_steps: 500
+
+experiments:
+  codet5p_220m_label_comparison:
+    model_name: "Salesforce/codet5p-220m"
+    hyperparameters:
+      # Frozen champion hyperparameters from Stage 4
+      learning_rates: [4e-5]
+      batch_sizes: [8]
+      num_epochs: [6]
+      weight_decay: [0.01]
+      gradient_accumulation_steps: [1]
+      # Multiple seeds for stability
+      seeds: [41, 42, 43]
+
+# Early stopping same as champion
+early_stopping:
+  enabled: true
+  patience: 2
+  min_delta: 0.001
+  metric: "f1"
+  mode: "max"
+
+# Threshold sweep enabled
+threshold_sweep:
+  enabled: true
+  metric: "f1"
+  range: [0.3, 0.7]
+  step: 0.01
+
+# Note: This config is used for all 3 label variants
+# The dataset path is specified at runtime via CLI arguments

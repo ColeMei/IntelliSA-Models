@@ -1,0 +1,40 @@
+# Evaluation config for label comparison experiment
+# Purpose: Evaluate models trained on different label variants using same test sets
+
+evaluation:
+  batch_size: 8
+  max_samples: null
+  save_predictions: true
+
+  threshold:
+    mode: file
+    # Uses single threshold from per-run sweep file for all test sets
+
+  test_sets:
+    # Same test sets for all label variants to ensure fair comparison
+    combined: "data/processed/test.jsonl"
+    technologies:
+      chef: "data/processed/chef/chef_test.jsonl"
+      ansible: "data/processed/ansible/ansible_test.jsonl"
+      puppet: "data/processed/puppet/puppet_test.jsonl"
+
+  output_dir: "results/experiments/evaluation/label_comparison"
+
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1
+    - confusion_matrix
+    - per_smell_metrics
+
+models:
+  encoder:
+    path: "models/experiments/label_comparison/_label_comparison_placeholder_"
+    batch_size: 8
+
+batch_evaluation:
+  job_spacing_seconds: 1
+
+# Note: All models use the same test sets to enable direct comparison
+# of label quality impact on model performance
