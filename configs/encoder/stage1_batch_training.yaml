@@ -42,6 +42,16 @@ experiments:
       gradient_accumulation_steps: [1]
     # 12 experiments
 
+  unixcoder_base:
+    model_name: "microsoft/unixcoder-base"
+    hyperparameters:
+      learning_rates: [1e-5, 2e-5]
+      batch_sizes: [8, 16]
+      num_epochs: [3, 5]
+      weight_decay: [0.01]
+      gradient_accumulation_steps: [1]
+    # 2 × 2 × 2 × 1 × 1 = 8 experiments
+
   # Larger models: more thorough exploration (these matter most)
   codet5_large:
     model_name: "Salesforce/codet5-large"

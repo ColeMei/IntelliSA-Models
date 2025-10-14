@@ -7,7 +7,7 @@
 ## Pipeline Stages
 
 ### Stage 1: Broad Candidate Selection
-- **Models**: CodeBERT, CodeT5 (small/base), CodeT5+ (220M)
+- **Models**: CodeBERT, CodeT5 (small/base), CodeT5+ (220M), UniXcoder (base)
 - **Purpose**: Identify promising model families
 - **Evaluation**: Argmax decision rule
 - **Config**: `configs/encoder/stage1_batch_training.yaml`
@@ -35,6 +35,9 @@
 ```bash
 # Stage 1: Broad sweep
 python scripts/batch_train_models.py --config configs/encoder/stage1_batch_training.yaml
+
+# Stage 1 (UniXcoder-only subset)
+python scripts/batch_train_models.py --config configs/encoder/stage1_batch_training.yaml --filter unixcoder_base
 
 # Stage 2: Focused tuning
 python scripts/batch_train_models.py --config configs/encoder/stage2_batch_training_220m_770m.yaml
@@ -69,7 +72,7 @@ python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold_fro
 - **Stage 4 freeze**: `eval_threshold_frozen.yaml` resolves the champion threshold via the `codet5p_220m_final_sweep_latest` symlink, so no manual path edits are needed
 
 ### Model Selection Strategy
-- **Stage 1-2**: Model family comparison
+- **Stage 1-2**: Model family comparison (CodeBERT, CodeT5 variants, UniXcoder)
 - **Stage 3**: Hyperparameter optimization
 - **Stage 4**: Multi-seed stability (median F1 selection)
 - **Generative path**: Initial comparisons showed generative TP/FP prompts underperform encoders, so subsequent stages focus solely on encoder sweeps.
