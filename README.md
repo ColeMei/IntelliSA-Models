@@ -121,7 +121,7 @@ python scripts/batch_evaluate_models.py --config configs/eval/eval_threshold.yam
 
 ## Champion Model
 
-The selected champion model (CodeT5p-220M) is integrated into the `iacsec` CLI tool as IntelliSA's neural inference component.
+The selected champion model (CodeT5p-220M) is integrated into the `intellisa` CLI tool as IntelliSA's neural inference component.
 
 ## Acknowledgements
 
